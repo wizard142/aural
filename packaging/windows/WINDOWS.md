@@ -40,11 +40,13 @@ The result is `dist\Aural-Windows-x64-Installer.exe`, with a Start-menu shortcut
 - Missing download dependencies show an error dialog. Logs are in `%LOCALAPPDATA%\Aural\aural.log`.
 - Download engine updates currently require rebuilding/updating the Windows package. Automatic updates are not implemented.
 
-## Release status
+## Verification status
 
-Compatibility code and cross-platform tests were checked on Linux. **A Windows executable and installer have not been compiled or tested here**, because the workspace has no Windows runner. This kit contains the source and build setup, not a finished `.exe`.
+The source app, portable Windows executable, and installed Windows app passed all 17 desktop smoke checks on a GitHub-hosted Windows runner. The installer, Start-menu shortcut, and data-preserving uninstall passed too. The 17 backend/platform tests passed on Windows and Linux. Linux desktop checks passed locally on CachyOS and on an Ubuntu GitHub runner.
 
-Before distributing a built release, test Start-menu launching, YouTube Music, MP3 download/playback, clipboard and drag-and-drop, playlist deletion, restart persistence, upgrade and uninstall on a clean Windows machine. Code signing has not been configured, so Windows may show an unsigned-app warning.
+See [verification details](../../docs/TESTING.md). These automated checks cover the listed behavior; they do not certify every hardware configuration or guarantee continued access to YouTube.
+
+For additional manual coverage, try live YouTube Music browsing, physical cross-pane dragging, and upgrades on your Windows machine. Code signing has not been configured, so Windows may show an unsigned-app warning.
 
 The package carries bundled icon and tool notices plus a Python dependency license inventory. FFmpeg binaries from Gyan are GPLv3; public binary distribution must also satisfy the corresponding-source requirements for the selected build and dependencies. Preserve the tool manifest and arrange the matching source distribution before a public release.
 
