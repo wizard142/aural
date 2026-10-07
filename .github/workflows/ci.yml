@@ -3,6 +3,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to verify
+        type: choice
+        default: both
+        options: [both, linux, windows]
 permissions:
   contents: read
 jobs:
@@ -13,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: ${{ fromJSON(github.event.inputs.platform == 'linux' && '["ubuntu-latest"]' || github.event.inputs.platform == 'windows' && '["windows-latest"]' || '["ubuntu-latest","windows-latest"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -24,7 +30,11 @@ jobs:
         run: python -m pip install -r requirements-build.txt
       - name: Install Linux runtime dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg libegl1 libopengl0 libnss3 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libasound2t64
+        run: |
+          if ! python -c 'from PySide6.QtWebEngineWidgets import QWebEngineView' || ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=1 update
+            sudo apt-get install -y ffmpeg libegl1 libopengl0 libnss3 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libasound2t64
+          fi
       - name: Prepare Windows runtime tools
         if: runner.os == 'Windows'
         env:
