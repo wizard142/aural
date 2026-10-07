@@ -1,0 +1,58 @@
+name: Desktop checks
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    name: Desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements-build.txt
+      - name: Install Linux runtime dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libegl1 libopengl0 libnss3 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libasound2t64
+      - name: Prepare Windows runtime tools
+        if: runner.os == 'Windows'
+        run: python packaging/windows/prepare_tools.py
+      - name: Backend and platform tests
+        run: python -m unittest discover -s tests -v
+      - name: Desktop interaction and audio tests
+        run: python desktop.py --self-test --self-test-result smoke-result.json
+      - name: Build Windows package
+        if: runner.os == 'Windows'
+        run: python -m PyInstaller --noconfirm --clean packaging/windows/Aural.spec
+      - name: Test the packaged Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $Process = Start-Process -FilePath '.\dist\Aural\Aural.exe' -ArgumentList '--self-test','--self-test-result',"`"$PWD\smoke-result-packaged.json`"" -Wait -PassThru
+          if ($Process.ExitCode -ne 0) { throw "Packaged desktop test failed: $($Process.ExitCode)" }
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ matrix.os }}
+          path: |
+            smoke-result*.json
+            smoke-result*.png
+          if-no-files-found: warn
+      - name: Upload tested Windows package
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aural-Windows-x64
+          path: dist/Aural/

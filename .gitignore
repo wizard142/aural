@@ -1,0 +1,12 @@
+.venv/
+.venv-win/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.work/
+build/
+dist/
+vendor/
+*.log
+smoke-result*.json
+smoke-result*.png
