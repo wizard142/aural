@@ -136,7 +136,7 @@ def run():
         def got(raw):
             if raw:
                 status=json.loads(raw)
-                if status.get('done'):finish(status)
+                if isinstance(status,dict) and status.get('done'):finish(status)
         poll=QTimer();poll.timeout.connect(lambda:window.library.page().runJavaScript('JSON.stringify(window.smokeStatus||null)',got));poll.start(500)
         QTimer.singleShot(60000,lambda:finish({'error':'Desktop smoke test timed out'}))
         application.exec()
