@@ -46,6 +46,21 @@ jobs:
         run: |
           $Process = Start-Process -FilePath '.\dist\Aural\Aural.exe' -ArgumentList '--self-test','--self-test-result',"`"$PWD\smoke-result-packaged.json`"" -Wait -PassThru
           if ($Process.ExitCode -ne 0) { throw "Packaged desktop test failed: $($Process.ExitCode)" }
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $Compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $Compiler)) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed.' }
+          }
+          & $Compiler packaging/windows/Aural.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
+      - name: Test Windows installation and uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./packaging/windows/test_installer.ps1
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -61,3 +76,9 @@ jobs:
         with:
           name: Aural-Windows-x64
           path: dist/Aural/
+      - name: Upload tested Windows installer
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Aural-Windows-x64-Installer
+          path: dist/Aural-Windows-x64-Installer.exe
