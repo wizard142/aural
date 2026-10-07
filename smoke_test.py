@@ -16,7 +16,7 @@ def run():
     from PySide6.QtCore import QTimer, QMimeData, QUrl, QPoint, QPointF, Qt
     from PySide6.QtGui import QDragEnterEvent, QDropEvent
     from app import DATA, Handler, ThreadingHTTPServer, insights
-    from desktop import Window
+    Window = sys.modules['__main__'].Window
     from runtime import APP_ROOT, binary, subprocess_options, dependency_error
     from browser_support import blocked_request
 
@@ -104,13 +104,15 @@ def run():
         })();
         '''
         began = [False]
-        def start(ok):
-            if ok and not began[0]:
+        def ready(value):
+            if value and not began[0]:
                 began[0] = True
                 window.library.page().runJavaScript(script)
+        def start(ok=True):
+            if ok and not began[0]:
+                window.library.page().runJavaScript("typeof refresh==='function'",ready)
         window.library.loadFinished.connect(start)
-        # loadFinished may have fired during synchronous worker setup on slow hosts.
-        QTimer.singleShot(2000,lambda:start(True) if not began[0] else None)
+        startup=QTimer();startup.timeout.connect(start);startup.start(500)
         done = [False]
         def finish(status):
             if done[0]: return
