@@ -1,6 +1,8 @@
 """Fetch verified Windows x64 FFmpeg and Deno bundles for Aural."""
 import hashlib
 import json
+import os
+from urllib.parse import urlparse
 from pathlib import Path
 import shutil
 import tempfile
@@ -11,13 +13,19 @@ ROOT=Path(__file__).resolve().parents[2]
 BIN=ROOT/'vendor'/'bin'
 NOTICES=ROOT/'vendor'/'notices'
 
+def request(url):
+    headers={'User-Agent':'Aural-build/1.0'}
+    token=os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+    if token and urlparse(url).hostname=='api.github.com':headers['Authorization']='Bearer '+token
+    return Request(url,headers=headers)
+
 def fetch(url, target):
-    request=Request(url,headers={'User-Agent':'Aural-build/1.0'})
-    with urlopen(request,timeout=120) as response, target.open('wb') as output:
+    req=request(url)
+    with urlopen(req,timeout=120) as response, target.open('wb') as output:
         shutil.copyfileobj(response,output)
 
 def read(url):
-    with urlopen(Request(url,headers={'User-Agent':'Aural-build/1.0'}),timeout=60) as response:
+    with urlopen(request(url),timeout=60) as response:
         return response.read().decode('utf-8')
 
 def checked_download(url, expected, target):

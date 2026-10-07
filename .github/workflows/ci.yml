@@ -27,11 +27,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg libegl1 libopengl0 libnss3 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libasound2t64
       - name: Prepare Windows runtime tools
         if: runner.os == 'Windows'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python packaging/windows/prepare_tools.py
       - name: Backend and platform tests
         run: python -m unittest discover -s tests -v
       - name: Desktop interaction and audio tests
         run: python desktop.py --self-test --self-test-result smoke-result.json
+      - name: Capture Windows dependency notices
+        if: runner.os == 'Windows'
+        run: python -m piplicenses --with-license-file --format=json --output-file=vendor/notices/python-licenses.json
       - name: Build Windows package
         if: runner.os == 'Windows'
         run: python -m PyInstaller --noconfirm --clean packaging/windows/Aural.spec
