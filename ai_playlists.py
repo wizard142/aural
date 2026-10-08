@@ -65,22 +65,36 @@ def set_key(config,key,remember):
     if remember:
         backend=secure_backend()
         if not backend:return 'Key is available this session. No secure credential store was found; it was not saved to disk.'
-        try:backend.set_password('Aural AI',ident,key)
+        try:
+            backend.set_password('Aural AI',ident,key)
+            if backend.get_password('Aural AI',ident)!=key:
+                return 'Key is available this session. Secure storage could not confirm saving it; unlock your wallet and try again.'
         except Exception:return 'Key is available this session. The credential store is locked or unavailable; it was not saved.'
     return None
 
-def get_key(config):
+def key_credentials(config):
     ident=account(config)
-    with SECRET_LOCK:
-        if ident in SESSION_KEYS:return SESSION_KEYS[ident]
+    with SECRET_LOCK:session=SESSION_KEYS.get(ident)
     backend=secure_backend()
+    stored=None
     if backend:
         try:
-            value=backend.get_password('Aural AI',ident)
-            if value:return value
+            stored=backend.get_password('Aural AI',ident)
         except Exception:pass
+    if session:return session,'secure' if session==stored else 'session'
+    if stored:return stored,'secure'
     name=PROVIDERS[config['provider']]['env']
-    return os.environ.get(name,'') if name else ''
+    value=os.environ.get(name,'') if name else ''
+    return value,'environment' if value else 'none'
+
+def get_key(config):
+    with SECRET_LOCK:
+        if account(config) in SESSION_KEYS:return SESSION_KEYS[account(config)]
+    return key_credentials(config)[0]
+
+def key_status(config):
+    key,source=key_credentials(config)
+    return {'has_key':bool(key),'key_saved':source=='secure','key_source':source}
 
 def forget_key(config):
     with SECRET_LOCK:SESSION_KEYS.pop(account(config),None)

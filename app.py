@@ -168,7 +168,7 @@ def ai_config():
 
 def ai_status():
     config=ai_config()
-    return {**config,'has_key':bool(ai_playlists.get_key(config)),'providers':[{'id':name,'name':item['name'],'endpoint':item['endpoint']} for name,item in ai_playlists.PROVIDERS.items()]}
+    return {**config,**ai_playlists.key_status(config),'providers':[{'id':name,'name':item['name'],'endpoint':item['endpoint']} for name,item in ai_playlists.PROVIDERS.items()]}
 
 def update_ai_config(body):
     config=ai_playlists.validate_config(body)

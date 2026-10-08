@@ -37,6 +37,25 @@ class ProviderTests(unittest.TestCase):
         with patch.object(ai,'secure_backend',return_value=None):
             warning=ai.set_key(config,'test-key',True);self.assertIn('not saved',warning);self.assertEqual(ai.get_key(config),'test-key');ai.forget_key(config);self.assertNotIn(ai.account(config),ai.SESSION_KEYS)
         other=self.config('compatible');other2=dict(other,endpoint='https://another.example/v1/chat/completions');self.assertNotEqual(ai.account(other),ai.account(other2))
+    def test_remembered_key_survives_new_session_and_reports_storage(self):
+        config=self.config('groq');stored={}
+        backend=MagicMock()
+        backend.set_password.side_effect=lambda service,ident,value:stored.update({ident:value})
+        backend.get_password.side_effect=lambda service,ident:stored.get(ident)
+        backend.delete_password.side_effect=lambda service,ident:stored.pop(ident,None)
+        with patch.object(ai,'secure_backend',return_value=backend):
+            self.assertIsNone(ai.set_key(config,'test-key',True))
+            self.assertEqual(ai.key_status(config),{'has_key':True,'key_saved':True,'key_source':'secure'})
+            ai.clear_session_keys()
+            self.assertEqual(ai.get_key(config),'test-key')
+            self.assertTrue(ai.key_status(config)['key_saved'])
+            ai.forget_key(config)
+            self.assertFalse(ai.key_status(config)['has_key'])
+    def test_failed_secure_save_is_explicit_and_session_only(self):
+        config=self.config('groq');backend=MagicMock();backend.get_password.return_value=None
+        with patch.object(ai,'secure_backend',return_value=backend):
+            self.assertIn('could not confirm',ai.set_key(config,'test-key',True))
+            self.assertEqual(ai.key_status(config),{'has_key':True,'key_saved':False,'key_source':'session'})
     def test_no_redirects_or_key_in_prompt(self):
         config=self.config('openai');ai.SESSION_KEYS[ai.account(config)]='test-key'
         response=MagicMock();response.__enter__.return_value=response;response.read.return_value=json.dumps({'output':[{'content':[{'type':'output_text','text':'{"track_ids":["a"]}'}]}]}).encode()
