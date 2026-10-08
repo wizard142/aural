@@ -92,7 +92,8 @@ def download(key, url, kind):
             with lock: jobs[key]['detail'] = tail[-400:]
         code = process.wait()
         if code==0:
-            try:capture_profile(DATA,video_id(url)+'-'+kind)
+            try:
+                with lock:capture_profile(DATA,video_id(url)+'-'+kind)
             except (OSError,ValueError):pass
         with lock:
             jobs[key]['status'] = 'complete' if code == 0 else 'failed'
@@ -103,8 +104,10 @@ def download(key, url, kind):
 DEFAULT_SETTINGS={'palette':'sage','layout':'grid','adblock':True,'insights':True,'ai_provider':'openai','ai_model':'','ai_endpoint':''}
 PALETTES={'sage','violet','ocean','rose','amber','mono'}
 def read_settings():
-    file=DATA/'settings.json'
-    return {**DEFAULT_SETTINGS,**(json.loads(file.read_text()) if file.exists() else {})}
+    # Windows cannot atomically replace a file while another thread reads it.
+    with lock:
+        file=DATA/'settings.json'
+        return {**DEFAULT_SETTINGS,**(json.loads(file.read_text(encoding='utf-8')) if file.exists() else {})}
 def update_settings(body):
     value=read_settings()
     if body.get('palette',value['palette']) not in PALETTES: raise ValueError('Unknown palette')
