@@ -191,8 +191,8 @@ def generate_ai_playlist(job_id,prompt,color,config):
         with lock:
             tracks=library()
             profiles={t['id']:read_profile(DATA,t['id']) for t in tracks}
-        catalog=ai_playlists.build_catalog(tracks,profiles,prompt)
-        result=ai_playlists.call_provider(config,json.dumps({'request':prompt,'library':catalog},ensure_ascii=False))
+        catalog=ai_playlists.build_catalog(tracks,profiles,prompt,config)
+        result=ai_playlists.call_provider(config,json.dumps({'request':prompt,'library':catalog},ensure_ascii=False,separators=(',',':')))
         validated=ai_playlists.validate_result(result,{t['id'] for t in catalog})
         with lock:
             if SESSION_ENDED:return

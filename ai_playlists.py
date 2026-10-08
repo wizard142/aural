@@ -108,6 +108,11 @@ def request_payload(config,key,prompt):
     else:
         headers['Authorization']='Bearer '+key
         body={'model':config['model'],'messages':[{'role':'system','content':SYSTEM},{'role':'user','content':prompt}],'max_tokens':6000}
+        if config['provider']=='groq':
+            body['max_tokens']=2000
+            body['messages'][0]['content']+=' Select at most 20 songs and omit annotations to keep this response short.'
+            body['response_format']={'type':'json_object'}
+            if config['model'].startswith('openai/gpt-oss-'):body['reasoning_effort']='low'
     return url,headers,body
 
 def extract_text(config,data):
@@ -117,7 +122,7 @@ def extract_text(config,data):
     if kind=='gemini':return '\n'.join(c.get('text','') for c in data.get('candidates',[{}])[0].get('content',{}).get('parts',[]) if not c.get('thought'))
     return data.get('choices',[{}])[0].get('message',{}).get('content','') or ''
 
-def call_provider(config,prompt):
+def call_provider(config,prompt,_size_retry=False):
     key=get_key(config)
     if not key:raise ValueError('Add an API key in Settings → AI')
     if config['provider']=='compatible':
@@ -130,7 +135,14 @@ def call_provider(config,prompt):
             if len(raw)>2_000_000:raise ValueError('AI response was too large')
             data=json.loads(raw)
     except HTTPError as error:
-        descriptions={401:'API key was rejected',403:'This key cannot access the selected model',429:'Provider rate limit or billing quota reached'}
+        error.close()
+        if error.code==413 and not _size_retry:
+            smaller=shrink_prompt(prompt)
+            if smaller!=prompt:
+                result=call_provider(config,smaller,_size_retry=True)
+                validate_result(result,{item['id'] for item in json.loads(smaller)['library']})
+                return result
+        descriptions={413:'Song metadata exceeds this provider’s request size or token budget. Try a shorter playlist request or a provider with a higher limit.',401:'API key was rejected',403:'This key cannot access the selected model',429:'Provider rate limit or billing quota reached'}
         raise ValueError(descriptions.get(error.code,f'Provider request failed (HTTP {error.code}). Check the model ID and endpoint.')) from None
     except (URLError,TimeoutError) as error:
         raise ValueError('Could not reach the AI provider. Check your connection and endpoint.') from None
@@ -155,16 +167,38 @@ def validate_result(result,valid_ids):
     return {'name':name.strip()[:60],'tracks':ids,'reason':str(reason)[:800]}
 
 
-def build_catalog(tracks,profiles,prompt):
+def shrink_prompt(prompt):
+    """Retry size rejections once without exposing provider error bodies."""
+    try:
+        data=json.loads(prompt);catalog=data.get('library')
+        if not isinstance(catalog,list) or not catalog:return prompt
+        data['library']=catalog[:max(1,len(catalog)//2)]
+        for item in data['library']:
+            if isinstance(item,dict):item.pop('description',None);item.pop('ai_estimate',None)
+        return json.dumps(data,ensure_ascii=False,separators=(',',':'))
+    except (ValueError,TypeError,AttributeError):return prompt
+
+
+def build_catalog(tracks,profiles,prompt,config=None):
     tokens=set(re.findall(r'[a-z]{3,}',prompt.lower()))
     def score(track):
         profile=profiles[track['id']];text=json.dumps(profile['facts'])+' '+json.dumps(profile.get('genre_hints',[]))
         return sum(token in text.lower() for token in tokens)
     selected=sorted(tracks,key=score,reverse=True)[:250]
     catalog=[]
+    budget=8000 if (config or {}).get('provider')=='groq' else 60000
+    used=len(prompt.encode('utf-8'))
     for track in selected:
         p=profiles[track['id']];facts=p['facts']
-        catalog.append({'id':track['id'],'title':track['title'],'artist':facts.get('artist') or track['artist'],'album':facts.get('album'),'duration':track['duration'],'reported_genres':facts.get('genres_reported',[]),'genre_hints':p.get('genre_hints',[]),'tags':facts.get('tags',[])[:12],'description':facts.get('description','')[:600],'ai_estimate':p.get('ai_estimate'),'audio_analyzed':False})
+        item={'id':track['id'],'title':str(track['title'])[:160],'artist':str(facts.get('artist') or track['artist'])[:120],'album':str(facts['album'])[:120] if facts.get('album') else None,'duration':track['duration'],'reported_genres':facts.get('genres_reported',[]),'genre_hints':p.get('genre_hints',[]),'tags':facts.get('tags',[]),'description':facts.get('description','')[:160 if (config or {}).get('provider')=='groq' else 600],'audio_analyzed':False}
+        for field in ('tags','reported_genres','genre_hints'):
+            item[field]=[str(value)[:60] for value in item[field]][:8]
+        estimate=p.get('ai_estimate')
+        if estimate:
+            item['ai_estimate']={'genres':[str(value)[:60] for value in (estimate.get('genres') or [])][:8],'moods':[str(value)[:60] for value in (estimate.get('moods') or [])][:8],'energy':estimate.get('energy'),'confidence':estimate.get('confidence')}
+        cost=len(json.dumps(item,ensure_ascii=False,separators=(',',':')).encode('utf-8'))+1
+        if used+cost>budget:continue
+        catalog.append(item);used+=cost
     return catalog
 
 def annotations(result,selected_ids):

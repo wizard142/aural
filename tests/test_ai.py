@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
+from urllib.error import HTTPError
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import ai_playlists as ai
 import song_metadata as metadata
@@ -50,6 +51,36 @@ class ProviderTests(unittest.TestCase):
     def test_annotations_are_estimates(self):
         items=ai.annotations({'annotations':[{'id':'a','genres':['Jazz'],'moods':['calm'],'confidence':.7,'energy':'low','evidence':'Tags'},{'id':'outside'}]}, {'a'})
         self.assertEqual(len(items),1);self.assertIn('audio not analyzed',items[0]['basis'])
+    def test_groq_catalog_bounds_large_and_unicode_metadata(self):
+        tracks=[{'id':str(i),'title':'音楽'*200,'artist':'Artist','duration':100} for i in range(250)]
+        profiles={t['id']:{'facts':{'description':'jazz '*10000,'tags':['jazz'*200]*100,'genres_reported':['Jazz']},'genre_hints':['jazz']} for t in tracks}
+        catalog=ai.build_catalog(tracks,profiles,'jazz',self.config('groq'))
+        self.assertTrue(catalog);self.assertLess(len(catalog),250)
+        self.assertLess(len(json.dumps({'request':'jazz','library':catalog},ensure_ascii=False,separators=(',',':')).encode()),8100)
+        self.assertEqual(catalog[0]['reported_genres'],['Jazz'])
+        _,_,body=ai.request_payload(self.config('groq'),'test-key','prompt')
+        self.assertEqual(body['max_tokens'],2000)
+    def test_size_rejection_retries_smaller_catalog_once(self):
+        config=self.config('groq');ai.SESSION_KEYS[ai.account(config)]='test-key'
+        response=MagicMock();response.__enter__.return_value=response
+        response.read.return_value=json.dumps({'choices':[{'message':{'content':'{"track_ids":["a"]}'}}]}).encode()
+        opener=MagicMock();opener.open.side_effect=[HTTPError(config['endpoint'],413,'too large',{},None),response]
+        prompt=json.dumps({'request':'jazz','library':[{'id':'a','description':'long'},{'id':'b'}]})
+        with patch.object(ai,'build_opener',return_value=opener):self.assertEqual(ai.call_provider(config,prompt)['track_ids'],['a'])
+        retried=json.loads(json.loads(opener.open.call_args.args[0].data)['messages'][1]['content'])
+        self.assertEqual(retried['library'],[{'id':'a'}]);self.assertEqual(opener.open.call_count,2)
+        opener.open.side_effect=[HTTPError(config['endpoint'],413,'secret provider body',{},None)]*2
+        opener.open.reset_mock()
+        with patch.object(ai,'build_opener',return_value=opener),self.assertRaisesRegex(ValueError,'request size or token budget'):
+            ai.call_provider(config,prompt)
+        self.assertEqual(opener.open.call_count,2)
+    def test_retry_cannot_choose_song_removed_from_shortlist(self):
+        config=self.config('groq');ai.SESSION_KEYS[ai.account(config)]='test-key'
+        response=MagicMock();response.__enter__.return_value=response
+        response.read.return_value=json.dumps({'choices':[{'message':{'content':'{"track_ids":["b"]}'}}]}).encode()
+        opener=MagicMock();opener.open.side_effect=[HTTPError(config['endpoint'],413,'too large',{},None),response]
+        with patch.object(ai,'build_opener',return_value=opener),self.assertRaisesRegex(ValueError,'outside'):
+            ai.call_provider(config,json.dumps({'library':[{'id':'a'},{'id':'b'}]}))
 
 class PlaylistLifecycleTests(unittest.TestCase):
     def setUp(self):
