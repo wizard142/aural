@@ -99,7 +99,7 @@ python desktop.py --self-test --self-test-result smoke-result.json
 
 The desktop smoke test uses an isolated temporary library and a generated silent audio fixture. It checks real playback, like/unlike persistence, playlists, drag-and-drop, themes, layouts, duplicate rejection, listening history, deletion, and media-tool conversion. It leaves your music alone. A failed check exits nonzero and writes a JSON report.
 
-Previous stable Linux and Windows builds passed; the AI update is being verified in CI. See [verification details](docs/TESTING.md). GitHub Actions runs Linux and Windows checks and exercises the **packaged** Windows executable as well as the source app. A passing test run is evidence for the covered behavior, not a claim that every YouTube page or Windows hardware setup works.
+The AI update passed Linux and Windows CI, including the portable and installed Windows app. See [verification details](docs/TESTING.md). GitHub Actions runs Linux and Windows checks and exercises the **packaged** Windows executable as well as the source app. A passing test run is evidence for the covered behavior, not a claim that every YouTube page or Windows hardware setup works.
 
 ## Credits
 
