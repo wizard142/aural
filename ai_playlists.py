@@ -32,6 +32,7 @@ class NoRedirect(HTTPRedirectHandler):
 def validate_config(body):
     provider=body.get('provider','openai');model=body.get('model','').strip();endpoint=body.get('endpoint','').strip()
     if provider not in PROVIDERS:raise ValueError('Choose an AI provider')
+    if (model.startswith('sk-') and len(model)>25) or model.startswith(('AIza','gsk_','xai-')):raise ValueError('That looks like an API key. Enter it in the key field, not the model field.')
     if not model or len(model)>150 or not re.fullmatch(r'[A-Za-z0-9_./:@-]+',model):raise ValueError('Enter a valid model ID from your provider')
     if provider!='compatible':endpoint=PROVIDERS[provider]['endpoint']
     parsed=urlparse(endpoint)

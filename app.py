@@ -198,6 +198,7 @@ def generate_ai_playlist(job_id,prompt,color,config):
             playlist={'id':uuid.uuid4().hex,'name':validated['name'],'color':color,'tracks':validated['tracks'],'temporary':True,'ai':True,'reason':validated['reason'],'catalog_count':len(catalog)}
             TEMP_PLAYLISTS.append(playlist)
             for estimate in ai_playlists.annotations(result,set(validated['tracks'])):
+                estimate.update(provider=config.get('provider',''),model=config.get('model',''))
                 profile=profiles[estimate['id']];profile['ai_estimate']=estimate
                 save_profile(DATA,estimate['id'],profile)
             AI_JOBS[job_id].update(status='complete',playlist_id=playlist['id'],detail=validated['reason'])
