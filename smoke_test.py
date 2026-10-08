@@ -22,7 +22,21 @@ def run():
 
     output = Path(sys.argv[sys.argv.index('--self-test-result')+1]).resolve() if '--self-test-result' in sys.argv else DATA/'smoke-result.json'
     output.parent.mkdir(parents=True, exist_ok=True)
+    import ai_playlists
+    original_provider=ai_playlists.call_provider
+    original_backend=ai_playlists.secure_backend
+    ai_playlists.secure_backend=lambda:None
+    ai_playlists.call_provider=lambda config,prompt:{'name':'Fixture mix','reason':'Mock provider: jazz tags','track_ids':['dQw4w9WgXcQ-audio'],'annotations':[{'id':'dQw4w9WgXcQ-audio','genres':['jazz'],'confidence':.7,'evidence':'Fixture tags'}]}
     results = {'platform': sys.platform, 'frozen': bool(getattr(sys, 'frozen', False)), 'checks': {}, 'errors': []}
+    if sys.platform=='win32':
+        import uuid
+        backend=original_backend()
+        if backend is None:raise RuntimeError('Windows credential-store backend is unavailable')
+        ident='self-test-'+uuid.uuid4().hex
+        try:
+            backend.set_password('Aural self-test',ident,'fixture-key-no-billing')
+            results['checks']['windows_secure_key_store']=backend.get_password('Aural self-test',ident)=='fixture-key-no-billing'
+        finally:backend.delete_password('Aural self-test',ident)
     application = QApplication(sys.argv)
     application.setApplicationName('aural-self-test')
     server = None
@@ -49,7 +63,7 @@ def run():
         options = subprocess_options()
         converted = subprocess.run([binary('ffmpeg'),'-hide_banner','-loglevel','error','-y','-i',str(wav),str(DATA/(stem+'.mp3'))], timeout=45, **options)
         if converted.returncode: raise RuntimeError('FFmpeg fixture conversion failed: '+converted.stdout)
-        (DATA/(stem+'.info.json')).write_text(json.dumps({'title':'Playback fixture','uploader':'Aural tests','duration':12}), encoding='utf-8')
+        (DATA/(stem+'.info.json')).write_text(json.dumps({'title':'Playback fixture','uploader':'Aural tests','duration':12,'tags':['jazz']}), encoding='utf-8')
         results['checks']['ffmpeg_conversion'] = True
         class FixtureHandler(SimpleHTTPRequestHandler):
             def log_message(self, *args): pass
@@ -94,6 +108,22 @@ def run():
           $('#settings-open').click();if(!$('#settings-modal').open)throw Error('Settings drawer failed');$('#settings-close').click();checks.settings_drawer=true;
           try{await api('/api/download',{url:'https://music.youtube.com/watch?v=dQw4w9WgXcQ',kind:'audio'});throw Error('Duplicate accepted')}catch(e){if(!e.message.includes('already in your library'))throw e}checks.duplicates=true;
           try{await api('/api/download',{url:'https://music.youtube.com/watch?v=dQw4w9WgXcQ',kind:'video'});throw Error('Video accepted')}catch(e){if(!e.message.includes('audio downloads only'))throw e}checks.audio_only=true;
+
+          await loadAiSettings();$('#ai-provider').value='openai';$('#ai-model').value='test-model';$('#ai-key').value='test-key';$('#ai-remember').checked=false;
+          await $('#ai-settings-form').onsubmit({preventDefault(){},submitter:$('#ai-settings-form button[type=submit]')});
+          if(!aiConfig.has_key||$('#ai-key').value)throw Error('AI key settings failed');checks.ai_key_settings=true;
+          await $('#ai-open').onclick();$('#ai-prompt').value='Calm jazz then heavier songs';$('#ai-consent').checked=true;
+          await $('#ai-form').onsubmit({preventDefault(){}});
+          let mix=playlistData.find(p=>p.id===activePlaylist);if(!mix?.temporary||$('#save-mix').hidden)throw Error('Temporary AI mix failed');checks.ai_temporary_mix=true;
+          playlistDialog(mix);$('#playlist-name').value='Saved jazz';
+          await $('#playlist-form').onsubmit({preventDefault(){},submitter:$('#playlist-form button[type=submit]')});
+          mix=playlistData.find(p=>p.id===activePlaylist);if(mix.name!=='Saved jazz'||!mix.temporary)throw Error('Temporary rename failed');checks.ai_rename=true;
+          await $('#save-mix').onclick();if(playlistData.find(p=>p.id===activePlaylist).temporary)throw Error('Saving AI mix failed');checks.ai_save=true;
+          const profile=await(await fetch('/api/song/'+tracks[0].id)).json();if(!profile.facts.tags.includes('jazz')||profile.ai_estimate?.genres[0]!=='jazz'||profile.audio_analyzed)throw Error('Song metadata provenance failed');checks.song_metadata=true;
+          const second=await api('/api/ai/generate',{prompt:'Another mix',consent:true,color:'#9eddea'});
+          let completed=false;for(let i=0;i<20;i++){const jobs=await(await fetch('/api/ai/jobs')).json();if(jobs.find(j=>j.id===second.id)?.status==='complete'){completed=true;break}await new Promise(r=>setTimeout(r,100))}if(!completed)throw Error('Second mix failed');
+          await api('/api/session/end',{});await refresh();if(playlistData.some(p=>p.temporary)||!playlistData.some(p=>p.name==='Saved jazz'))throw Error('Session cleanup removed a saved mix or kept a temporary mix');checks.ai_close_cleanup=true;
+          const logo=await(await fetch('/api/logo.svg')).text();if(!logo.includes('#292929'))throw Error('Theme logo failed');checks.theme_logo=true;
           await new Promise(r=>setTimeout(r,7300));media.pause();flushListening();await listenQueue;
           const stats=await(await fetch('/api/insights')).json();if(stats.seconds<6||stats.plays<1)throw Error('Listening not counted');checks.listening_history=true;
           $('#favorite').click();await new Promise(r=>setTimeout(r,200));await refresh();
@@ -131,6 +161,10 @@ def run():
                 QApplication.sendEvent(window.library,drop)
                 results['checks']['native_drop']=enter.isAccepted() and drop.isAccepted() and received==['https://music.youtube.com/watch?v=dQw4w9WgXcQ']
                 if not results['checks']['native_drop']:results['errors'].append('Native drag route failed')
+            from PIL import Image
+            with Image.open(DATA/'icons'/'aural.png') as bitmap:
+                rgb=bitmap.convert('RGB').getpixel((128,128))
+                results['checks']['native_theme_icon']=max(rgb)-min(rgb)<=2
             results['checks']['webengine_assets']=True
             window.grab().save(str(output.with_suffix('.png')))
             exit_code[0] = 0 if not results['errors'] and all(results['checks'].values()) else 1
@@ -145,6 +179,8 @@ def run():
     except Exception as error:
         results['errors'].append(str(error));save()
     finally:
+        ai_playlists.call_provider=original_provider
+        ai_playlists.secure_backend=original_backend
         for local_server in (server,fixture_server):
             if local_server:local_server.shutdown();local_server.server_close()
         if window:

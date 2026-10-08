@@ -20,3 +20,7 @@ Desktop coverage: FFmpeg conversion; real downloader-worker download and audio e
 Windows tested application commit: `da05a8b`. Linux CI commit: `f83daa7`. The change between those commits only adjusted CI dependency setup and platform selection; the application code and assets are identical. The combined run's obsolete Ubuntu job was cancelled after a system package update stalled; the Windows job completed successfully and the replacement Linux verification is green.
 
 Reports for source, portable and installed Windows runs and Linux runs are uploaded in their Actions artifacts. Automated coverage does not prove that every YouTube Music tile exposes a drag link, that every ad is blocked, or that all Windows hardware and older operating-system versions are supported. Windows binaries are unsigned.
+
+## AI update checks (8 October 2026)
+
+Local backend tests now cover nine provider request/response adapters, no key in request prompts/settings files, secure-storage fallback, scoped custom-endpoint credentials, playlist-ID validation, metadata provenance, temporary rename/save/cleanup, and late-generation rejection after the session ends. Desktop tests exercise AI settings, generating a temporary mix, rename, save, metadata estimates, close cleanup, and theme-colored SVG/native icons. Provider generation uses a mocked response in these checks; no live paid-provider call has been made without a supplied key.

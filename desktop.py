@@ -40,7 +40,7 @@ try:
     from PySide6.QtWebEngineWidgets import QWebEngineView
 except ImportError:
     sys.exit('Install PySide6 with Qt WebEngine first. See README.md for Linux setup.')
-from app import DATA, Handler, ThreadingHTTPServer, read_settings
+from app import DATA, Handler, ThreadingHTTPServer, read_settings, clear_temporary
 from runtime import APP_ROOT, dependency_error
 from browser_support import blocked_request, DRAG_SCRIPT, COSMETIC_SCRIPT, music_theme_script
 PALETTE_COLORS={'sage':'#d1f294','violet':'#c7b5ff','ocean':'#9eddea','rose':'#f3b3c4','amber':'#eac58c','mono':'#e0e0e0'}
@@ -186,7 +186,7 @@ class Window(QMainWindow):
         event.ignore()
         if self.closing:return
         self.closing=True
-        self.library.page().runJavaScript("(async()=>{try{media.pause();flushListening();await listenQueue}catch{}location.href='aural://close'})()")
+        self.library.page().runJavaScript("(async()=>{try{media.pause();flushListening();await listenQueue;await api('/api/session/end',{})}catch{}location.href='aural://close'})()")
         QTimer.singleShot(1500,self.finish_close)
     def finish_close(self):
         if self.close_ready:return
@@ -222,6 +222,11 @@ class Window(QMainWindow):
             QDockWidget::title{{padding:12px;background:{surface};}}
             QLabel{{color:#929b8d;}}
         """)
+        from branding import write_icons, refresh_shortcuts
+        png,ico=write_icons(palette,DATA)
+        icon=QIcon(str(png));QApplication.setWindowIcon(icon);self.setWindowIcon(icon)
+        try:refresh_shortcuts(png,ico)
+        except OSError:pass
         self.add.setStyleSheet('background:'+accent+';color:#162012;font-weight:bold;')
         self.youtube.page().runJavaScript(music_theme_script(accent,surface))
     def sync_settings(self):
@@ -282,6 +287,7 @@ def main():
     window.show()
     try: return application.exec()
     finally:
+        clear_temporary()
         server.shutdown()
         server.server_close()
 

@@ -1,13 +1,13 @@
 # Build on Windows with: python -m PyInstaller packaging/windows/Aural.spec
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 ROOT=Path(SPECPATH).resolve().parents[1]
 for tool in ('ffmpeg.exe','ffprobe.exe','deno.exe'):
     if not (ROOT/'vendor'/'bin'/tool).is_file():
         raise SystemExit('Run packaging/windows/prepare_tools.py first. Missing '+tool)
 datas=[(str(ROOT/'static'),'static'),(str(ROOT/'vendor'/'notices'),'vendor/notices'),(str(ROOT/'packaging'/'windows'/'WINDOWS.md'),'.')]
 binaries=[(str(ROOT/'vendor'/'bin'/tool),'vendor/bin') for tool in ('ffmpeg.exe','ffprobe.exe','deno.exe')]
-hiddenimports=[]
+hiddenimports=collect_submodules('keyring.backends')
 for package in ('yt_dlp','yt_dlp_ejs'):
     package_data,package_bins,package_imports=collect_all(package)
     datas+=package_data;binaries+=package_bins;hiddenimports+=package_imports

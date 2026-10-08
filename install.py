@@ -7,6 +7,13 @@ import subprocess
 import sys
 
 ROOT=Path(__file__).resolve().parent
+from branding import write_icons
+from runtime import data_directory
+import json
+def install_icons():
+    data=data_directory();palette='sage'
+    if (data/'settings.json').exists():palette=json.loads((data/'settings.json').read_text()).get('palette','sage')
+    return write_icons(palette,data)
 
 def desktop_escape(value):
     return str(value).replace('\\','\\\\').replace('"','\\"').replace('`','\\`').replace('$','\\$').replace('%','%%')
@@ -20,7 +27,7 @@ def install_windows():
     programs=roaming/'Microsoft'/'Windows'/'Start Menu'/'Programs'
     programs.mkdir(parents=True,exist_ok=True)
     env=os.environ.copy()
-    env.update(AURAL_SHORTCUT_FILE=str(programs/'Aural.lnk'),AURAL_SHORTCUT_TARGET=str(pythonw),AURAL_SHORTCUT_ROOT=str(ROOT),AURAL_SHORTCUT_ICON=str(ROOT/'static'/'aural.ico'))
+    env.update(AURAL_SHORTCUT_FILE=str(programs/'Aural.lnk'),AURAL_SHORTCUT_TARGET=str(pythonw),AURAL_SHORTCUT_ROOT=str(ROOT),AURAL_SHORTCUT_ICON=str(install_icons()[1]))
     # Paths are passed in environment variables, not interpolated into shell code.
     script=r'''
 $ErrorActionPreference='Stop'
@@ -50,7 +57,7 @@ GenericName=Music Library
 Comment=Music and playlists stored locally
 Exec="{desktop_escape(python)}" "{desktop_escape(ROOT/'desktop.py')}"
 Path={ROOT}
-Icon={ROOT/'static/aural.png'}
+Icon={install_icons()[0]}
 Terminal=false
 Categories=AudioVideo;Audio;Player;
 Keywords=Music;YouTube;Playlist;Offline;

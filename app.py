@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import json, os, pathlib, re, subprocess, threading, uuid, mimetypes, sqlite3, datetime, math
+import ai_playlists
+from song_metadata import capture_profile, read_profile, save_profile
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, unquote, parse_qs
 from runtime import APP_ROOT, data_directory, downloader_command, binary, subprocess_options
@@ -8,6 +10,9 @@ DATA = data_directory()
 DATA.mkdir(parents=True, exist_ok=True)
 lock = threading.RLock()
 jobs = {}
+TEMP_PLAYLISTS=[]
+AI_JOBS={}
+SESSION_ENDED=False
 def library():
     result = []
     for p in DATA.glob('*.info.json'):
@@ -31,9 +36,10 @@ def video_id(url):
 
 PLAYLISTS=DATA/'playlists.json'
 def playlists():
-    return json.loads(PLAYLISTS.read_text()) if PLAYLISTS.exists() else []
+    return (json.loads(PLAYLISTS.read_text(encoding='utf-8')) if PLAYLISTS.exists() else []) + list(TEMP_PLAYLISTS)
 def save_playlists(items):
-    temp=PLAYLISTS.with_suffix('.tmp');temp.write_text(json.dumps(items));temp.replace(PLAYLISTS)
+    TEMP_PLAYLISTS[:]=[p for p in items if p.get('temporary')]
+    temp=PLAYLISTS.with_suffix('.tmp');temp.write_text(json.dumps([p for p in items if not p.get('temporary')]),encoding='utf-8');temp.replace(PLAYLISTS)
 def edit_playlist(body):
     items=playlists(); action=body.get('action','create'); pid=body.get('id')
     if action=='create':
@@ -45,6 +51,7 @@ def edit_playlist(body):
         item=next((p for p in items if p['id']==pid),None)
         if not item: raise ValueError('Playlist not found')
         if action=='delete': items.remove(item)
+        elif action=='save': item['temporary']=False
         elif action=='update':
             name=body.get('name','').strip();color=body.get('color','')
             if not name or len(name)>60 or not re.fullmatch(r'#[0-9a-fA-F]{6}',color): raise ValueError('Choose a name and color')
@@ -84,13 +91,16 @@ def download(key, url, kind):
             tail = line.strip()
             with lock: jobs[key]['detail'] = tail[-400:]
         code = process.wait()
+        if code==0:
+            try:capture_profile(DATA,video_id(url)+'-'+kind)
+            except (OSError,ValueError):pass
         with lock:
             jobs[key]['status'] = 'complete' if code == 0 else 'failed'
             jobs[key]['detail'] = 'Added to your library' if code == 0 else tail
     except OSError as e:
         with lock: jobs[key].update(status='failed',detail=str(e))
 
-DEFAULT_SETTINGS={'palette':'sage','layout':'grid','adblock':True,'insights':True}
+DEFAULT_SETTINGS={'palette':'sage','layout':'grid','adblock':True,'insights':True,'ai_provider':'openai','ai_model':'','ai_endpoint':''}
 PALETTES={'sage','violet','ocean','rose','amber','mono'}
 def read_settings():
     file=DATA/'settings.json'
@@ -101,7 +111,7 @@ def update_settings(body):
     if body.get('layout',value['layout']) not in ('grid','list','compact'): raise ValueError('Unknown layout')
     for key in ('adblock','insights'):
         if key in body and not isinstance(body[key],bool): raise ValueError('Invalid setting')
-    value.update({k:body[k] for k in DEFAULT_SETTINGS if k in body})
+    value.update({k:body[k] for k in ('palette','layout','adblock','insights') if k in body})
     temp=DATA/'settings.tmp';temp.write_text(json.dumps(value));temp.replace(DATA/'settings.json');return value
 
 def stats_db():
@@ -149,6 +159,69 @@ def insights():
     artist=max(artists,key=artists.get) if artists else None
     return {'seconds':totals[0],'plays':totals[1],'unique_tracks':len(leaders),'top_artist':artist,'leaders':leaders[:5],'days':[{'day':d,'seconds':t} for d,t in reversed(days)]}
 
+def ai_config():
+    settings=read_settings();provider=settings.get('ai_provider','openai')
+    return {'provider':provider,'model':settings.get('ai_model',''),'endpoint':settings.get('ai_endpoint') or ai_playlists.PROVIDERS[provider]['endpoint']}
+
+def ai_status():
+    config=ai_config()
+    return {**config,'has_key':bool(ai_playlists.get_key(config)),'providers':[{'id':name,'name':item['name'],'endpoint':item['endpoint']} for name,item in ai_playlists.PROVIDERS.items()]}
+
+def update_ai_config(body):
+    config=ai_playlists.validate_config(body)
+    warning=None
+    if body.get('forget'):warning=ai_playlists.forget_key(config)
+    elif body.get('key'):warning=ai_playlists.set_key(config,body['key'],bool(body.get('remember')))
+    elif body.get('remember') and ai_playlists.get_key(config):warning=ai_playlists.set_key(config,ai_playlists.get_key(config),True)
+    value=read_settings();value.update(ai_provider=config['provider'],ai_model=config['model'],ai_endpoint=config['endpoint'])
+    temp=DATA/'settings.tmp';temp.write_text(json.dumps(value),encoding='utf-8');temp.replace(DATA/'settings.json')
+    return {**ai_status(),'warning':warning}
+
+def clear_temporary():
+    global SESSION_ENDED
+    with lock:
+        TEMP_PLAYLISTS.clear();SESSION_ENDED=True
+        ai_playlists.clear_session_keys()
+
+def generate_ai_playlist(job_id,prompt,color,config):
+    try:
+        with lock:
+            tracks=library()
+            profiles={t['id']:read_profile(DATA,t['id']) for t in tracks}
+        catalog=ai_playlists.build_catalog(tracks,profiles,prompt)
+        result=ai_playlists.call_provider(config,json.dumps({'request':prompt,'library':catalog},ensure_ascii=False))
+        validated=ai_playlists.validate_result(result,{t['id'] for t in catalog})
+        with lock:
+            if SESSION_ENDED:return
+            existing={t['id'] for t in library()}
+            if any(t not in existing for t in validated['tracks']):raise ValueError('A selected song was removed while generating; try again')
+            playlist={'id':uuid.uuid4().hex,'name':validated['name'],'color':color,'tracks':validated['tracks'],'temporary':True,'ai':True,'reason':validated['reason'],'catalog_count':len(catalog)}
+            TEMP_PLAYLISTS.append(playlist)
+            for estimate in ai_playlists.annotations(result,set(validated['tracks'])):
+                profile=profiles[estimate['id']];profile['ai_estimate']=estimate
+                save_profile(DATA,estimate['id'],profile)
+            AI_JOBS[job_id].update(status='complete',playlist_id=playlist['id'],detail=validated['reason'])
+    except Exception as error:
+        with lock:
+            # Never serialize transport errors/headers that could contain API keys.
+            message=str(error) if isinstance(error,ValueError) else 'Could not generate a playlist. Check your provider settings.'
+            AI_JOBS[job_id].update(status='failed',detail=message[:800])
+
+def start_ai_playlist(body):
+    prompt=body.get('prompt','').strip();color=body.get('color','#d1f294')
+    if not prompt or len(prompt)>2000:raise ValueError('Describe your playlist in 1–2000 characters')
+    if body.get('consent') is not True:raise ValueError('Confirm sending song metadata to your chosen provider')
+    if not re.fullmatch(r'#[0-9a-fA-F]{6}',color):raise ValueError('Invalid playlist color')
+    if SESSION_ENDED:raise ValueError('This app session has ended')
+    if not library():raise ValueError('Download some songs before creating an AI playlist')
+    config=ai_playlists.validate_config(ai_config())
+    if not ai_playlists.get_key(config):raise ValueError('Add an API key in Settings → AI')
+    if any(j['status']=='generating' for j in AI_JOBS.values()):raise ValueError('A playlist is already being generated')
+    if len(TEMP_PLAYLISTS)>=20:raise ValueError('Save or delete a temporary mix before creating another')
+    job_id=uuid.uuid4().hex;AI_JOBS[job_id]={'id':job_id,'status':'generating','detail':'Choosing songs…'}
+    threading.Thread(target=generate_ai_playlist,args=(job_id,prompt,color,config),daemon=True).start()
+    return {'id':job_id}
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         import logging
@@ -160,10 +233,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply({'error':'Origin rejected'},403)
         try:
             size=int(self.headers.get('Content-Length',0))
-            if size <= 0 or size > 4096: raise ValueError('Invalid request size')
+            if size <= 0 or size > (16384 if self.path.startswith('/api/ai/') else 4096): raise ValueError('Invalid request size')
             body=json.loads(self.rfile.read(size))
             if not isinstance(body,dict): raise ValueError('Invalid request')
             with lock:
+                if self.path=='/api/session/end':clear_temporary();return self.reply({'ok':True})
+                if self.path=='/api/ai/settings':return self.reply(update_ai_config(body))
+                if self.path=='/api/ai/generate':return self.reply(start_ai_playlist(body),202)
                 if self.path=='/api/settings': return self.reply(update_settings(body))
                 if self.path=='/api/listen': return self.reply(record_listen(body))
                 if self.path=='/api/favorites':
@@ -186,6 +262,18 @@ class Handler(BaseHTTPRequestHandler):
         except OSError: self.reply({'error':'Could not update local storage'},500)
     def do_GET(self):
         path=unquote(urlparse(self.path).path)
+        if path=='/api/logo.svg':
+            from branding import logo_svg
+            svg=logo_svg(read_settings()['palette']).encode('utf-8');self.send_response(200);self.send_header('Content-Type','image/svg+xml');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(svg)));self.end_headers();self.wfile.write(svg);return
+        if path=='/api/ai/settings':
+            with lock:return self.reply(ai_status())
+        if path=='/api/ai/jobs':
+            with lock:return self.reply(list(AI_JOBS.values()))
+        if path.startswith('/api/song/'):
+            track_id=path.removeprefix('/api/song/')
+            with lock:
+                if track_id not in {t['id'] for t in library()}:return self.reply({'error':'Song not found'},404)
+                return self.reply(read_profile(DATA,track_id))
         if path == '/api/settings':
             with lock: return self.reply(read_settings())
         if path == '/api/insights':

@@ -10,6 +10,7 @@ Aural is an audio-first desktop library for Linux and Windows. Browse YouTube Mu
 
 ## What's inside
 
+- **AI mixes with your own API key:** ask for a genre, a mood, a personal scenario, or a transition from one style to another. Mixes are temporary until you save them.
 - **A local library:** search, favorites, playlists and offline playback.
 - **YouTube Music in the window:** search, copy a song link, add music, or drag an available song link into the library.
 - **Playlists with personality:** names and colors, drag-to-add, and colored outlines on songs. Multiple playlists? Multiple colors.
@@ -55,6 +56,20 @@ The portable Windows build includes Python, Qt, yt-dlp, FFmpeg/ffprobe and Deno;
 
 Use **•••** on a song to manage playlist membership or delete its local files. Deleting a playlist keeps the songs. Deleting a song removes it from every playlist. The app asks before deletion.
 
+## AI mixes
+
+Open **Settings → AI**, select a provider, enter a model ID available to your account, and add its API key. Presets support OpenAI, Claude/Anthropic, Google Gemini, DeepSeek, Groq, Mistral, xAI, and OpenRouter; a custom OpenAI-compatible HTTPS endpoint is also supported.
+
+Keys are kept in memory unless you choose **Remember key securely**. Saved keys use Windows Credential Manager, macOS Keychain where available, or a supported Linux Secret Service/KWallet backend. If secure storage is unavailable or locked, the key stays session-only and the app tells you. Aural does not write keys into its settings JSON, song metadata or playlists. **Forget key** removes the app's stored key; provider environment variables are managed separately.
+
+Select **AI mix** and describe what you want: “calm jazz, gradually switch to metal, about 40 minutes” or “upbeat pop for a rainy commute.” The prompt and selected song metadata go to your configured provider when you confirm. API billing and provider data-retention policies apply. Audio files, file paths, listening history and API keys are not included in the prompt.
+
+Generated playlists use downloaded songs only. They live in memory and disappear when the app closes, including an abnormal exit. **Edit** can rename/recolor a temporary mix. **Save mix** keeps it permanently. Saving does not change the chosen order. For large libraries, up to 250 metadata profiles are shortlisted by relevance; the AI never invents unavailable track IDs or adds duplicate IDs.
+
+New downloads save an additional hidden `.song.json` profile alongside the download metadata, including available artist, album, release year, duration, tags, description, reported genres, source and license. Existing downloads get profiles lazily when used by AI. Missing facts remain unknown. Keyword genre hints and optional AI genre/mood/energy estimates are marked as estimates, with their evidence kept separate. The app does not analyze audio or claim perfect genre recognition. **Song details** in the song menu lets you inspect this provenance without cluttering the library.
+
+The logo follows the selected palette in the sidebar, window/taskbar and installed shortcuts. Desktop icon caches may refresh a little later than the app. Windows installer artwork remains the default logo; your installed app icon changes with your palette.
+
 ## Your collection lives here
 
 | System | Default data folder |
@@ -84,7 +99,7 @@ python desktop.py --self-test --self-test-result smoke-result.json
 
 The desktop smoke test uses an isolated temporary library and a generated silent audio fixture. It checks real playback, like/unlike persistence, playlists, drag-and-drop, themes, layouts, duplicate rejection, listening history, deletion, and media-tool conversion. It leaves your music alone. A failed check exits nonzero and writes a JSON report.
 
-The Linux and Windows checks have passed; see [verification details](docs/TESTING.md). GitHub Actions runs Linux and Windows checks and exercises the **packaged** Windows executable as well as the source app. A passing test run is evidence for the covered behavior, not a claim that every YouTube page or Windows hardware setup works.
+Previous stable Linux and Windows builds passed; the AI update is being verified in CI. See [verification details](docs/TESTING.md). GitHub Actions runs Linux and Windows checks and exercises the **packaged** Windows executable as well as the source app. A passing test run is evidence for the covered behavior, not a claim that every YouTube page or Windows hardware setup works.
 
 ## Credits
 

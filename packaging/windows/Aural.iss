@@ -1,4 +1,4 @@
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 [Setup]
 AppId=io.aural.Aural
 AppName=Aural
@@ -20,8 +20,9 @@ CloseApplications=yes
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 [Files]
 Source: "..\..\dist\Aural\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\static\aural.ico"; DestDir: "{localappdata}\Aural\icons"; Flags: onlyifdoesntexist uninsneveruninstall
 [Icons]
-Name: "{group}\Aural"; Filename: "{app}\Aural.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\Aural"; Filename: "{app}\Aural.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\Aural"; Filename: "{app}\Aural.exe"; WorkingDir: "{app}"; IconFilename: "{localappdata}\Aural\icons\aural.ico"
+Name: "{autodesktop}\Aural"; Filename: "{app}\Aural.exe"; WorkingDir: "{app}"; IconFilename: "{localappdata}\Aural\icons\aural.ico"; Tasks: desktopicon
 [Run]
 Filename: "{app}\Aural.exe"; Description: "Launch Aural"; Flags: nowait postinstall skipifsilent

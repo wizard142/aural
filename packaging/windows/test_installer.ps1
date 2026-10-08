@@ -8,6 +8,7 @@ if (-not (Test-Path $Shortcut)) { throw 'Start-menu shortcut missing.' }
 $Shell = New-Object -ComObject WScript.Shell
 $Link = $Shell.CreateShortcut($Shortcut)
 if ($Link.TargetPath -ne (Join-Path $InstallRoot 'Aural.exe')) { throw 'Start-menu shortcut points to wrong executable.' }
+if ($Link.IconLocation -notlike '*Aural\icons\aural.ico*') { throw 'Shortcut does not use the theme-aware icon.' }
 $Report = Join-Path $PWD 'smoke-result-installed.json'
 $Process = Start-Process -FilePath (Join-Path $InstallRoot 'Aural.exe') -ArgumentList '--self-test','--self-test-result',"`"$Report`"" -Wait -PassThru
 if ($Process.ExitCode -ne 0) { throw "Installed app test failed: $($Process.ExitCode)" }
