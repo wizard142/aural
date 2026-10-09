@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import json, os, pathlib, re, subprocess, threading, uuid, mimetypes, sqlite3, datetime, math
 import ai_playlists
-from song_metadata import capture_profile, read_profile, save_profile, update_labels
+from song_metadata import capture_profile, read_profile, save_profile, update_labels, clean_labels
+import library_filters
 import song_identification
 import audio_analysis
 from song_enrichment import Enricher
@@ -193,19 +194,29 @@ def clear_temporary():
         TEMP_PLAYLISTS.clear();SESSION_ENDED=True
         ai_playlists.clear_session_keys()
 
-def generate_ai_playlist(job_id,prompt,color,config):
+def generate_ai_playlist(job_id,prompt,color,config,filters=None):
     try:
         with lock:
             tracks=library()
             profiles={t['id']:read_profile(DATA,t['id']) for t in tracks}
-        catalog=ai_playlists.build_catalog(tracks,profiles,prompt,config)
-        result=ai_playlists.call_provider(config,json.dumps({'request':prompt,'library':catalog},ensure_ascii=False,separators=(',',':')))
-        validated=ai_playlists.validate_result(result,{t['id'] for t in catalog})
+        filter_result=None
+        if filters:
+            filter_result=library_filters.select(tracks,profiles,filters)
+            if not filter_result['tracks']:
+                raise ValueError(f"No matching labels found. {len(filter_result['unknown_ids'])} songs need label review. Open Settings → Review labels; automatic detection cannot confirm missing genre/language labels.")
+            result={};catalog=tracks
+            counts=filter_result['counts']
+            validated={'name':library_filters.name(filters),'tracks':filter_result['tracks'],'reason':f"All {len(filter_result['tracks'])} matching songs from the full library: {counts['confirmed']} confirmed, {counts['reported']} source-reported, {counts['estimated']} predicted. {len(filter_result['unknown_ids'])} songs have unknown labels. No AI selection or song-count cap."}
+        else:
+            catalog=ai_playlists.build_catalog(tracks,profiles,prompt,config)
+            result=ai_playlists.call_provider(config,json.dumps({'request':prompt,'library':catalog},ensure_ascii=False,separators=(',',':')))
+            validated=ai_playlists.validate_result(result,{t['id'] for t in catalog})
         with lock:
             if SESSION_ENDED:return
             existing={t['id'] for t in library()}
             if any(t not in existing for t in validated['tracks']):raise ValueError('A selected song was removed while generating; try again')
             playlist={'id':uuid.uuid4().hex,'name':validated['name'],'color':color,'tracks':validated['tracks'],'temporary':True,'ai':True,'reason':validated['reason'],'catalog_count':len(catalog)}
+            if filters:playlist.update(ai=False,filters=filters,filter_report={key:value for key,value in filter_result.items() if key!='tracks'})
             TEMP_PLAYLISTS.append(playlist)
             for estimate in ai_playlists.annotations(result,set(validated['tracks'])):
                 estimate.update(provider=config.get('provider',''),model=config.get('model',''))
@@ -220,17 +231,21 @@ def generate_ai_playlist(job_id,prompt,color,config):
 
 def start_ai_playlist(body):
     prompt=body.get('prompt','').strip();color=body.get('color','#d1f294')
-    if not prompt or len(prompt)>2000:raise ValueError('Describe your playlist in 1–2000 characters')
-    if body.get('consent') is not True:raise ValueError('Confirm sending song metadata to your chosen provider')
+    filters=library_filters.criteria(body['filters']) if isinstance(body.get('filters'),dict) else library_filters.simple_request(prompt)
+    if filters:filters=library_filters.criteria(filters)
+    if not filters and (not prompt or len(prompt)>2000):raise ValueError('Describe your playlist in 1–2000 characters')
+    if not filters and body.get('consent') is not True:raise ValueError('Confirm sending song metadata to your chosen provider')
     if not re.fullmatch(r'#[0-9a-fA-F]{6}',color):raise ValueError('Invalid playlist color')
     if SESSION_ENDED:raise ValueError('This app session has ended')
     if not library():raise ValueError('Download some songs before creating an AI playlist')
-    config=ai_playlists.validate_config(ai_config())
-    if not ai_playlists.get_key(config):raise ValueError('Add an API key in Settings → AI')
+    config={}
+    if not filters:
+        config=ai_playlists.validate_config(ai_config())
+        if not ai_playlists.get_key(config):raise ValueError('Add an API key in Settings → AI')
     if any(j['status']=='generating' for j in AI_JOBS.values()):raise ValueError('A playlist is already being generated')
     if len(TEMP_PLAYLISTS)>=20:raise ValueError('Save or delete a temporary mix before creating another')
     job_id=uuid.uuid4().hex;AI_JOBS[job_id]={'id':job_id,'status':'generating','detail':'Choosing songs…'}
-    threading.Thread(target=generate_ai_playlist,args=(job_id,prompt,color,config),daemon=True).start()
+    threading.Thread(target=generate_ai_playlist,args=(job_id,prompt,color,config,filters),daemon=True).start()
     return {'id':job_id}
 
 _ENRICHER=None
@@ -277,12 +292,22 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply({'error':'Origin rejected'},403)
         try:
             size=int(self.headers.get('Content-Length',0))
-            if size <= 0 or size > (16384 if self.path.startswith('/api/ai/') else 4096): raise ValueError('Invalid request size')
+            if size <= 0 or size > (16384 if self.path.startswith('/api/ai/') or self.path=='/api/song/labels/bulk' else 4096): raise ValueError('Invalid request size')
             body=json.loads(self.rfile.read(size))
             if not isinstance(body,dict): raise ValueError('Invalid request')
             with lock:
                 if self.path=='/api/profiles/settings':return self.reply(save_profile_settings(body))
                 if self.path=='/api/profiles/analyze':return self.reply(start_enrichment(body),202)
+                if self.path=='/api/filters/preview':
+                    filters=library_filters.criteria(body);tracks=library()
+                    return self.reply(library_filters.select(tracks,{t['id']:read_profile(DATA,t['id']) for t in tracks},filters))
+                if self.path=='/api/song/labels/bulk':
+                    ids=body.get('ids',[]);patch=body.get('labels',{})
+                    if not isinstance(ids,list) or not 1<=len(ids)<=100 or not all(isinstance(t,str) for t in ids) or not set(ids)<={t['id'] for t in library()}:raise ValueError('Select 1–100 downloaded songs')
+                    if not isinstance(patch,dict) or not patch or set(patch)-{'genres','languages'}:raise ValueError('Choose genre or language labels to apply')
+                    updates=[(tid,clean_labels({**read_profile(DATA,tid).get('user_labels',{}),**patch})) for tid in dict.fromkeys(ids)]
+                    for tid,labels in updates:update_labels(DATA,tid,labels)
+                    return self.reply({'updated':len(updates)})
                 if self.path=='/api/song/labels':
                     track_id=body.get('id')
                     if track_id not in {t['id'] for t in library()}:raise ValueError('Song not found')
@@ -328,6 +353,13 @@ class Handler(BaseHTTPRequestHandler):
             with lock:return self.reply(profile_settings())
         if path=='/api/profiles/jobs':
             with lock:return self.reply(list(_ENRICHER.jobs.values()) if _ENRICHER else [])
+        if path=='/api/labels/library':
+            with lock:
+                items=[]
+                for track in library():
+                    profile=read_profile(DATA,track['id']);labels=profile.get('user_labels',{})
+                    items.append({'id':track['id'],'title':track['title'],'artist':track['artist'],'genres':labels.get('genres',[]),'languages':labels.get('languages',[]),'source_language':profile.get('facts',{}).get('language') or '', 'estimated_genres':profile.get('audio_analysis',{}).get('genres',[])})
+                return self.reply(items)
         if path == '/api/settings':
             with lock: return self.reply(read_settings())
         if path == '/api/insights':

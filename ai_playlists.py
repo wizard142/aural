@@ -213,7 +213,8 @@ def build_catalog(tracks,profiles,prompt,config=None):
         if estimate:
             item['ai_estimate']={'genres':[str(value)[:60] for value in (estimate.get('genres') or [])][:8],'moods':[str(value)[:60] for value in (estimate.get('moods') or [])][:8],'energy':estimate.get('energy'),'confidence':estimate.get('confidence')}
         item['audio_analyzed']=bool(p.get('audio_analyzed'))
-        if p.get('user_labels'):item['user_labels']={k:v for k,v in p['user_labels'].items() if k in ('genres','moods','excluded_moods','energy','note')}
+        item['language']=facts.get('language') or None
+        if p.get('user_labels'):item['user_labels']={k:v for k,v in p['user_labels'].items() if k in ('genres','moods','excluded_moods','languages','energy','note')}
         identity=p.get('identification',{})
         if identity.get('status')=='matched':item['identification']={k:identity.get(k) for k in ('title','artist','album','genres','score')}
         analysis=p.get('audio_analysis')

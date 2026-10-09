@@ -127,6 +127,15 @@ def run():
           const corrected=await(await fetch('/api/song/'+tracks[0].id)).json();
           if(corrected.user_labels.moods[0]!=='sad'||corrected.user_labels.excluded_moods[0]!=='happy')throw Error('Personal labels did not save');checks.personal_song_labels=true;
           $('#close-track').click();await loadProfileSettings();
+          await openLabelReview();reviewSelected.add(tracks[0].id);renderLabelReview();$('#label-review-languages').value='Malayalam';
+          await $('#label-review-form').onsubmit({preventDefault(){},submitter:$('#label-review-form button[type=submit]')});
+          const labelled=await(await fetch('/api/song/'+tracks[0].id)).json();if(labelled.user_labels.languages[0]!=='malayalam'||labelled.user_labels.moods[0]!=='sad')throw Error('Bulk language labels failed or overwrote mood');checks.bulk_language_labels=true;
+          $('#label-review-close').click();$('#mix-mode').value='filter';$('#mix-language').value='malayalam';$('#mix-confirmed').checked=true;await $('#ai-open').onclick();await previewMix();
+          if(!$('#mix-filter-count').textContent.startsWith('1 matches'))throw Error('Whole-library preview failed');
+          await $('#ai-form').onsubmit({preventDefault(){}});await refresh();const filtered=playlistData.find(p=>p.filters);
+          if(!filtered||filtered.tracks.length!==1||filtered.ai||filtered.filter_report.counts.confirmed!==1)throw Error('Local filter generation failed');
+          if($('#playlist-note').hidden||!$('#playlist-note').textContent.includes('All 1 matching songs'))throw Error('Filter coverage report missing');checks.whole_library_filter=true;
+          $('#mix-mode').value='ai';mixMode();
           if(!$('#analyze-library')||!$('#identify-library')||!$('#audio-auto'))throw Error('Profile settings controls missing');checks.profile_controls=true;
           $('#acoustid-key').value='fixture-client';$('#identify-auto').checked=false;$('#acoustid-remember').checked=false;
           await $('#profile-settings-form').onsubmit({preventDefault(){}});

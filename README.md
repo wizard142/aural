@@ -81,6 +81,16 @@ The logo follows the selected palette in the sidebar, window/taskbar and install
 
 Stats start when Aural records local playback. They don't import your previous YouTube history or count listening inside the remote website. A play counts after 30 seconds, or half the track's duration if shorter. Pauses and seek jumps do not pad your listening time.
 
+## Include every matching song
+
+For genre/language collections, select **AI mix → Selection → Whole-library filter**. Choose a genre or language and create the mix. **Confirmed labels only** uses your own labels and includes every matching downloaded song, with no AI request, shortlist, 20-song or 60-song cap. Turn that option off to also use source-reported labels and audio genre predictions; the coverage report separates confirmed, reported, predicted and unknown songs. Rock matches substyles such as Hard Rock. Predictions are estimates, not guaranteed classifications.
+
+Simple requests such as “rock songs only” or “all Malayalam songs” also use the local full-library filter, including reported/predicted evidence and a coverage report. More complex mood/scenario/transition requests still use the configured AI provider and its bounded shortlist. A local filter works without an API key and can be renamed or saved like other temporary mixes.
+
+Language is independent of genre: the genre classifier does not recognize sung languages. **Settings → Song profiles → Review labels** lets you select several songs and confirm genres or languages in one action. Blank bulk fields keep existing labels; mood corrections and notes are preserved. Song details also supports multilingual language labels. Languages such as `ml`/`mal` and Malayalam are normalized for matching. Explicit user labels override conflicting automatic evidence.
+
+The guarantee is completeness for the labels you confirmed, not perfect automatic knowledge of every song. Unknown songs are counted for review rather than silently treated as nonmatches or guessed into a category. No redownload is needed.
+
 ## Give your songs better profiles
 
 **Settings → Song profiles → Analyze library** scans existing downloads; no redownload is needed. New downloads are analyzed automatically unless you turn that off. First analysis downloads approximately 20 MB of hash-verified MTG/Essentia ONNX models. FFmpeg samples three sections locally; a Discogs Effnet model estimates styles and four mood classifiers score sad, happy, relaxed and aggressive. Rough tempo and RMS energy measurements are also recorded, with their limitations. Playback stays available while one background worker processes the library. Results are cached in `.song.json`; scans skip current profiles unless you choose to analyze a song again.

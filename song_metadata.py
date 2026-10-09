@@ -34,9 +34,9 @@ def read_profile(data,track_id):
     path=profile_path(data,track_id)
     return json.loads(path.read_text(encoding='utf-8')) if path.exists() else capture_profile(data,track_id)
 
-def update_labels(data,track_id,body):
+def clean_labels(body):
     labels={}
-    for key in ('genres','moods','excluded_moods'):
+    for key in ('genres','moods','excluded_moods','languages'):
         value=body.get(key,[])
         if not isinstance(value,list) or len(value)>12 or not all(isinstance(v,str) and len(v)<=40 for v in value):raise ValueError('Use up to 12 labels of at most 40 characters')
         labels[key]=list(dict.fromkeys(v.strip().lower() for v in value if v.strip()))
@@ -46,4 +46,8 @@ def update_labels(data,track_id,body):
     if not isinstance(note,str) or len(note)>300:raise ValueError('Notes must be at most 300 characters')
     if set(labels['moods'])&set(labels['excluded_moods']):raise ValueError('A mood cannot be both included and excluded')
     labels.update(energy=energy,note=note.strip(),basis='Your personal labels',updated_at=datetime.now(timezone.utc).isoformat())
+    return labels
+
+def update_labels(data,track_id,body):
+    labels=clean_labels(body)
     result=read_profile(data,track_id);result['user_labels']=labels;save_profile(data,track_id,result);return result
