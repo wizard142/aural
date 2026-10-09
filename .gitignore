@@ -10,3 +10,5 @@ vendor/
 *.log
 smoke-result*.json
 smoke-result*.png
+
+:memory:.ses
