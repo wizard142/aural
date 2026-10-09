@@ -38,3 +38,13 @@ Real offline inference is tested on generated audible music using the actual has
 Fingerprint service responses and paid AI-provider calls are mocked in regression tests. Live AcoustID lookup requires an application/client key and has not been exercised with a user key. Audio inference and fingerprint generation are real and offline. Classification scores are not accuracy guarantees; personal corrections remain authoritative evidence.
 
 [Final Windows verification](https://github.com/wizard142/aural/actions/runs/37905525630) passed at application commit `7190fc4`: all 42 backend/platform tests, real model inference/fingerprinting, and 32 desktop checks in source, portable and installed forms. Installer shortcuts and data-preserving uninstall also passed. The tested v1.2.0 Windows installer bundles the audio models and Chromaprint tool.
+
+## Complete genre/language collections (9 October 2026)
+
+Application commit `50e7e25` adds deterministic whole-library filters for genre and language, confirmed-only selection, source/prediction coverage reporting, and a bulk label editor. Simple genre/language requests route locally without an AI provider or key. Complex mood/scenario/transition prompts retain their bounded AI shortlist; their selection is not a completeness guarantee. Language fields are now included in AI catalogs.
+
+All 50 backend/platform tests and 33 local Linux desktop checks pass. Regression tests cover 400 matching tracks without truncation, Rock/Hard Rock hierarchy, an omitted rock-track regression, all five matching language fixtures, multilingual and language-code aliases, combined criteria, correction priority over conflicting predictions, language in AI requests, and provider-free generation. Desktop coverage includes bulk language edits preserving mood labels, preview counts, local generation, and a visible coverage report. The application's audio/identity checks remain unchanged.
+
+Confirmed-only selection guarantees inclusion of every match against user-confirmed labels. It does not guarantee automatic classification of unknown songs. No private library metadata or API keys are bundled in the test fixtures.
+
+[Linux and Windows CI](https://github.com/wizard142/aural/actions/runs/37917344288) passed at `50e7e25`: all 50 backend/platform tests, 33 Linux desktop checks, and 34 Windows desktop checks in source, portable and installed forms. Installer and data-preserving uninstall verification passed. The downloadable installer is v1.2.1.
