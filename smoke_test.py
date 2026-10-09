@@ -28,6 +28,11 @@ def run():
     ai_playlists.secure_backend=lambda:None
     ai_playlists.call_provider=lambda config,prompt:{'name':'Fixture mix','reason':'Mock provider: jazz tags','track_ids':['dQw4w9WgXcQ-audio'],'annotations':[{'id':'dQw4w9WgXcQ-audio','genres':['jazz'],'confidence':.7,'evidence':'Fixture tags'}]}
     results = {'platform': sys.platform, 'frozen': bool(getattr(sys, 'frozen', False)), 'checks': {}, 'errors': []}
+    # The silent download fixture is unsuitable for audio classification. Test models
+    # separately with generated audible music and keep the fixture's auto scan off.
+    (DATA/'settings.json').write_text(json.dumps({'audio_auto':False}),encoding='utf-8')
+    from audio_selftest import run as audio_check
+    results['checks'].update(audio_check())
     if sys.platform=='win32':
         import uuid
         backend=original_backend()
@@ -109,6 +114,18 @@ def run():
           try{await api('/api/download',{url:'https://music.youtube.com/watch?v=dQw4w9WgXcQ',kind:'audio'});throw Error('Duplicate accepted')}catch(e){if(!e.message.includes('already in your library'))throw e}checks.duplicates=true;
           try{await api('/api/download',{url:'https://music.youtube.com/watch?v=dQw4w9WgXcQ',kind:'video'});throw Error('Video accepted')}catch(e){if(!e.message.includes('audio downloads only'))throw e}checks.audio_only=true;
 
+          showTrackOptions(tracks[0]);await $('#song-details').onclick();
+          if(!$('#song-label-form'))throw Error('Song label controls missing');
+          const labelsForm=$('#song-label-form');labelsForm.elements.moods.value='sad, calm';labelsForm.elements.excluded_moods.value='happy';labelsForm.elements.genres.value='jazz';
+          await labelsForm.onsubmit({preventDefault(){}});
+          const corrected=await(await fetch('/api/song/'+tracks[0].id)).json();
+          if(corrected.user_labels.moods[0]!=='sad'||corrected.user_labels.excluded_moods[0]!=='happy')throw Error('Personal labels did not save');checks.personal_song_labels=true;
+          $('#close-track').click();await loadProfileSettings();
+          if(!$('#analyze-library')||!$('#identify-library')||!$('#audio-auto'))throw Error('Profile settings controls missing');checks.profile_controls=true;
+          $('#acoustid-key').value='fixture-client';$('#identify-auto').checked=false;$('#acoustid-remember').checked=false;
+          await $('#profile-settings-form').onsubmit({preventDefault(){}});
+          let profileConfig=await(await fetch('/api/profiles/settings')).json();if(!profileConfig.has_key||profileConfig.key_saved)throw Error('Identification key setup failed');
+          await $('#forget-acoustid').onclick();profileConfig=await(await fetch('/api/profiles/settings')).json();if(profileConfig.has_key)throw Error('Identification key removal failed');checks.identification_key_settings=true;
           await loadAiSettings();$('#ai-provider').value='openai';$('#ai-model').value='test-model';$('#ai-key').value='test-key';$('#ai-remember').checked=false;
           await $('#ai-settings-form').onsubmit({preventDefault(){},submitter:$('#ai-settings-form button[type=submit]')});
           if(!aiConfig.has_key||$('#ai-key').value)throw Error('AI key settings failed');checks.ai_key_settings=true;

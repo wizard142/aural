@@ -1,0 +1,67 @@
+{
+  "license": "CC BY-NC-SA 4.0",
+  "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+  "source": "https://essentia.upf.edu/models.html",
+  "files": [
+    {
+      "name": "discogs-effnet-bsdynamic-1.onnx",
+      "url": "https://essentia.upf.edu/models/feature-extractors/discogs-effnet/discogs-effnet-bsdynamic-1.onnx",
+      "sha256": "a280825b334797cf677939db8cd5762c0392aedd0ca6415dbc1cd083f045e43c",
+      "size": 18027718
+    },
+    {
+      "name": "discogs-effnet-bsdynamic-1.json",
+      "url": "https://essentia.upf.edu/models/feature-extractors/discogs-effnet/discogs-effnet-bsdynamic-1.json",
+      "sha256": "a2e85b2e7372d5f8e0f35bdd6aeae1139f101087d183d0b2fb60b0ea0f01a0ff",
+      "size": 14986
+    },
+    {
+      "name": "mood_sad-discogs-effnet-1.onnx",
+      "url": "https://essentia.upf.edu/models/classification-heads/mood_sad/mood_sad-discogs-effnet-1.onnx",
+      "sha256": "1a50d11c23181bdfdeabc7d6032a2dad829dfc19c3776d2ee57ef1724cb08805",
+      "size": 514093
+    },
+    {
+      "name": "mood_sad-discogs-effnet-1.json",
+      "url": "https://essentia.upf.edu/models/classification-heads/mood_sad/mood_sad-discogs-effnet-1.json",
+      "sha256": "7f2c00099ad8255af33e43ab77d1ac2c86a1dd9f46d3e5ea2a9a52246f5033d9",
+      "size": 2334
+    },
+    {
+      "name": "mood_happy-discogs-effnet-1.onnx",
+      "url": "https://essentia.upf.edu/models/classification-heads/mood_happy/mood_happy-discogs-effnet-1.onnx",
+      "sha256": "0ca322819ef137b4b87e9866bffe7370a630e6f1165184ec106326cef6f81e06",
+      "size": 514097
+    },
+    {
+      "name": "mood_happy-discogs-effnet-1.json",
+      "url": "https://essentia.upf.edu/models/classification-heads/mood_happy/mood_happy-discogs-effnet-1.json",
+      "sha256": "ed4601bc396b23367d29cf45aa327366cdfdbd3e2baeb7a3f7893237f1ffd9e6",
+      "size": 2350
+    },
+    {
+      "name": "mood_relaxed-discogs-effnet-1.onnx",
+      "url": "https://essentia.upf.edu/models/classification-heads/mood_relaxed/mood_relaxed-discogs-effnet-1.onnx",
+      "sha256": "8ba6515a1e5943a72b3b475e3a25fc7a2ff04142c3eaa6aa0716fca371efdfff",
+      "size": 514101
+    },
+    {
+      "name": "mood_relaxed-discogs-effnet-1.json",
+      "url": "https://essentia.upf.edu/models/classification-heads/mood_relaxed/mood_relaxed-discogs-effnet-1.json",
+      "sha256": "86c0fe1c2c6d49bf08537bc2d3a602204feaede011ed119c1fc6c36270f60e6a",
+      "size": 2364
+    },
+    {
+      "name": "mood_aggressive-discogs-effnet-1.onnx",
+      "url": "https://essentia.upf.edu/models/classification-heads/mood_aggressive/mood_aggressive-discogs-effnet-1.onnx",
+      "sha256": "de36550b5d1660791ad732ed6de6ebfdc3e65dcf50b928b2578ddf103dbfb400",
+      "size": 514107
+    },
+    {
+      "name": "mood_aggressive-discogs-effnet-1.json",
+      "url": "https://essentia.upf.edu/models/classification-heads/mood_aggressive/mood_aggressive-discogs-effnet-1.json",
+      "sha256": "81773e95d78db1b93283d73b2d06344d1ff79685b57d9428a40d47fdfcf537b8",
+      "size": 2386
+    }
+  ]
+}

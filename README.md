@@ -66,7 +66,7 @@ Select **AI mix** and describe what you want: “calm jazz, gradually switch to 
 
 Generated playlists use downloaded songs only. They live in memory and disappear when the app closes, including an abnormal exit. **Edit** can rename/recolor a temporary mix. **Save mix** keeps it permanently. Saving does not change the chosen order. For large libraries, up to 250 metadata profiles are shortlisted by relevance within a bounded metadata budget. Groq uses a smaller budget, compact descriptions and mixes of up to 20 songs to suit limited accounts. A size rejection gets one retry with a smaller shortlist; the AI never invents unavailable track IDs or adds duplicate IDs.
 
-New downloads save an additional hidden `.song.json` profile alongside the download metadata, including available artist, album, release year, duration, tags, description, reported genres, source and license. Existing downloads get profiles lazily when used by AI. Missing facts remain unknown. Keyword genre hints and optional AI genre/mood/energy estimates are marked as estimates, with their evidence kept separate. The app does not analyze audio or claim perfect genre recognition. **Song details** in the song menu lets you inspect this provenance without cluttering the library.
+New downloads save an additional hidden `.song.json` profile alongside the download metadata, including available artist, album, release year, duration, tags, description, reported genres, source and license. Existing downloads get profiles lazily when used by AI. Missing facts remain unknown. Keyword genre hints and optional AI genre/mood/energy estimates are marked as estimates, with their evidence kept separate. Local audio analysis adds evidence rather than guaranteed mood labels. **Song details** in the song menu lets you inspect this provenance without cluttering the library.
 
 The logo follows the selected palette in the sidebar, window/taskbar and installed shortcuts. Desktop icon caches may refresh a little later than the app. Windows installer artwork remains the default logo; your installed app icon changes with your palette.
 
@@ -81,6 +81,18 @@ The logo follows the selected palette in the sidebar, window/taskbar and install
 
 Stats start when Aural records local playback. They don't import your previous YouTube history or count listening inside the remote website. A play counts after 30 seconds, or half the track's duration if shorter. Pauses and seek jumps do not pad your listening time.
 
+## Give your songs better profiles
+
+**Settings → Song profiles → Analyze library** scans existing downloads; no redownload is needed. New downloads are analyzed automatically unless you turn that off. First analysis downloads approximately 20 MB of hash-verified MTG/Essentia ONNX models. FFmpeg samples three sections locally; a Discogs Effnet model estimates styles and four mood classifiers score sad, happy, relaxed and aggressive. Rough tempo and RMS energy measurements are also recorded, with their limitations. Playback stays available while one background worker processes the library. Results are cached in `.song.json`; scans skip current profiles unless you choose to analyze a song again.
+
+**Song menu → Song details → Your labels** lets you correct genres, moods and energy, add a personal note, or exclude particular moods. Clear corrections to return to automatic estimates. Your labels have priority in AI prompts and relevance shortlisting, survive source metadata refreshes, and are preserved if you edit them while analysis is running. Model scores are not accuracy percentages.
+
+For **fingerprint identification**, register an application at [AcoustID](https://acoustid.org/new-application) and put its application/client key in Settings → Song profiles. This is separate from your AI-provider key and from AcoustID's user submission key. Choose Identify library or Identify recording, or enable identification of future downloads. Aural sends a Chromaprint fingerprint and duration, never the audio file, then fetches recording metadata from MusicBrainz with rate limiting. Low-scoring or conflicting matches remain unconfirmed; source metadata is not overwritten. Identification does not classify mood. Linux needs `fpcalc` (CachyOS/Arch: `chromaprint`; Debian/Ubuntu: `libchromaprint-tools`); the Windows installer bundles it.
+
+AI mixes receive compact audio estimates, identified metadata and your corrections alongside source evidence. Private fingerprints and local paths are excluded. Missing mood tags no longer mean a song cannot fit a mood. Hosted AI calls and lookup services still need their configured keys; audio inference itself runs offline after model installation.
+
+The models are separately licensed **CC BY-NC-SA 4.0** by the Music Technology Group at Universitat Pompeu Fabra. Their upstream URLs, versions and hashes are recorded in `model-assets.json`. Commercial model/service use requires appropriate licensing; the application's own code remains MIT.
+
 ## A few honest limits
 
 The embedded browser uses Qt WebEngine. Its optional filter blocks known ad/tracker requests; it does **not** promise an ad-free YouTube Music experience. Some site items do not expose a draggable song link. Downloader support depends on YouTube changes, so keep yt-dlp current or rebuild the Windows package. Download resume and automatic app updates are not implemented.
@@ -93,11 +105,13 @@ Download only content you own or are authorized to download, and respect the sou
 
 ```sh
 python -m pip install -r requirements-build.txt
+python audio_analysis.py
 python -m unittest discover -s tests -v
+python tests/audio_inference.py
 python desktop.py --self-test --self-test-result smoke-result.json
 ```
 
-The desktop smoke test uses an isolated temporary library and a generated silent audio fixture. It checks real playback, like/unlike persistence, playlists, drag-and-drop, themes, layouts, duplicate rejection, listening history, deletion, and media-tool conversion. It leaves your music alone. A failed check exits nonzero and writes a JSON report.
+The desktop smoke test uses an isolated temporary library, a generated playback fixture, and generated audible music for real local inference and fingerprint checks. It checks real playback, like/unlike persistence, playlists, drag-and-drop, themes, layouts, duplicate rejection, listening history, deletion, and media-tool conversion. It leaves your music alone. A failed check exits nonzero and writes a JSON report.
 
 The AI update passed Linux and Windows CI, including the portable and installed Windows app. See [verification details](docs/TESTING.md). GitHub Actions runs Linux and Windows checks and exercises the **packaged** Windows executable as well as the source app. A passing test run is evidence for the covered behavior, not a claim that every YouTube page or Windows hardware setup works.
 

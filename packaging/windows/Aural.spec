@@ -2,13 +2,13 @@
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 ROOT=Path(SPECPATH).resolve().parents[1]
-for tool in ('ffmpeg.exe','ffprobe.exe','deno.exe'):
+for tool in ('ffmpeg.exe','ffprobe.exe','deno.exe','fpcalc.exe'):
     if not (ROOT/'vendor'/'bin'/tool).is_file():
         raise SystemExit('Run packaging/windows/prepare_tools.py first. Missing '+tool)
-datas=[(str(ROOT/'static'),'static'),(str(ROOT/'vendor'/'notices'),'vendor/notices'),(str(ROOT/'packaging'/'windows'/'WINDOWS.md'),'.')]
-binaries=[(str(ROOT/'vendor'/'bin'/tool),'vendor/bin') for tool in ('ffmpeg.exe','ffprobe.exe','deno.exe')]
+datas=[(str(ROOT/'static'),'static'),(str(ROOT/'vendor'/'notices'),'vendor/notices'),(str(ROOT/'vendor'/'models'),'vendor/models'),(str(ROOT/'model-assets.json'),'.'),(str(ROOT/'packaging'/'windows'/'WINDOWS.md'),'.')]
+binaries=[(str(ROOT/'vendor'/'bin'/tool),'vendor/bin') for tool in ('ffmpeg.exe','ffprobe.exe','deno.exe','fpcalc.exe')]
 hiddenimports=collect_submodules('keyring.backends')
-for package in ('yt_dlp','yt_dlp_ejs'):
+for package in ('yt_dlp','yt_dlp_ejs','onnxruntime'):
     package_data,package_bins,package_imports=collect_all(package)
     datas+=package_data;binaries+=package_bins;hiddenimports+=package_imports
 a=Analysis([str(ROOT/'desktop.py')],pathex=[str(ROOT)],binaries=binaries,datas=datas,hiddenimports=hiddenimports)

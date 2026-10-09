@@ -1,4 +1,4 @@
-#define AppVersion "1.1.0"
+#define AppVersion "1.2.0"
 [Setup]
 AppId=io.aural.Aural
 AppName=Aural

@@ -62,6 +62,17 @@ def main():
         manifest['deno']={'url':asset['browser_download_url'],'version':release['tag_name'],'sha256':checked_download(asset['browser_download_url'],digest[7:],archive)}
         with ZipFile(archive) as zipfile:(BIN/'deno.exe').write_bytes(zipfile.read('deno.exe'))
         fetch('https://raw.githubusercontent.com/denoland/deno/'+release['tag_name']+'/LICENSE.md',NOTICES/'deno-LICENSE.md')
+        fpurl='https://github.com/acoustid/chromaprint/releases/download/v1.6.1/chromaprint-fpcalc-1.6.1-windows-x86_64.zip'
+        archive=scratch/'fpcalc.zip'
+        manifest['fpcalc']={'url':fpurl,'version':'1.6.1','sha256':checked_download(fpurl,'735d6182b38e9f364b84ce6f4ccd682c75e2851de89735711d6b762d12b92a4e',archive)}
+        with ZipFile(archive) as zipfile:
+            matches=[i for i in zipfile.infolist() if i.filename.endswith('fpcalc.exe')]
+            if len(matches)!=1:raise RuntimeError('Missing fpcalc.exe in Chromaprint archive')
+            (BIN/'fpcalc.exe').write_bytes(zipfile.read(matches[0]))
+            for item in zipfile.infolist():
+                if Path(item.filename).name.lower().startswith(('license','copying','readme')) and not item.is_dir():
+                    (NOTICES/('chromaprint-'+Path(item.filename).name)).write_bytes(zipfile.read(item))
+        fetch('https://raw.githubusercontent.com/acoustid/chromaprint/v1.6.1/LICENSE.md',NOTICES/'chromaprint-LICENSE.md')
     (NOTICES/'tool-manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
     print('Verified Windows FFmpeg, ffprobe and Deno prepared in',BIN)
 if __name__=='__main__':main()

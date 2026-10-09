@@ -22,7 +22,9 @@ def capture_profile(data, track_id):
     result={'version':1,'id':track_id,'source':'download metadata','captured_at':datetime.now(timezone.utc).isoformat(),'facts':facts,'genre_hints':hints,'hint_basis':'tags/categories/description keywords; not verified','audio_analyzed':False,'ai_estimate':None}
     path=profile_path(data,track_id)
     if path.exists():
-        old=json.loads(path.read_text(encoding='utf-8'));result['ai_estimate']=old.get('ai_estimate')
+        old=json.loads(path.read_text(encoding='utf-8'))
+        for key in ('ai_estimate','user_labels','audio_analysis','audio_analyzed','identification','fingerprint','profile_errors','analyzed_at'):
+            if key in old:result[key]=old[key]
     save_profile(data,track_id,result);return result
 
 def save_profile(data,track_id,result):
@@ -31,3 +33,17 @@ def save_profile(data,track_id,result):
 def read_profile(data,track_id):
     path=profile_path(data,track_id)
     return json.loads(path.read_text(encoding='utf-8')) if path.exists() else capture_profile(data,track_id)
+
+def update_labels(data,track_id,body):
+    labels={}
+    for key in ('genres','moods','excluded_moods'):
+        value=body.get(key,[])
+        if not isinstance(value,list) or len(value)>12 or not all(isinstance(v,str) and len(v)<=40 for v in value):raise ValueError('Use up to 12 labels of at most 40 characters')
+        labels[key]=list(dict.fromkeys(v.strip().lower() for v in value if v.strip()))
+    energy=body.get('energy','')
+    if energy not in ('','low','medium','high'):raise ValueError('Choose low, medium, high, or automatic energy')
+    note=body.get('note','')
+    if not isinstance(note,str) or len(note)>300:raise ValueError('Notes must be at most 300 characters')
+    if set(labels['moods'])&set(labels['excluded_moods']):raise ValueError('A mood cannot be both included and excluded')
+    labels.update(energy=energy,note=note.strip(),basis='Your personal labels',updated_at=datetime.now(timezone.utc).isoformat())
+    result=read_profile(data,track_id);result['user_labels']=labels;save_profile(data,track_id,result);return result

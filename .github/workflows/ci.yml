@@ -31,9 +31,9 @@ jobs:
       - name: Install Linux runtime dependencies
         if: runner.os == 'Linux'
         run: |
-          if ! python -c 'from PySide6.QtWebEngineWidgets import QWebEngineView' || ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+          if ! python -c 'from PySide6.QtWebEngineWidgets import QWebEngineView' || ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null || ! command -v fpcalc >/dev/null; then
             sudo apt-get -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=1 update
-            sudo apt-get install -y ffmpeg libegl1 libopengl0 libnss3 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libasound2t64
+            sudo apt-get install -y ffmpeg libchromaprint-tools libegl1 libopengl0 libnss3 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libasound2t64
           fi
       - name: Prepare Windows runtime tools
         if: runner.os == 'Windows'
@@ -42,6 +42,10 @@ jobs:
         run: python packaging/windows/prepare_tools.py
       - name: Backend and platform tests
         run: python -m unittest discover -s tests -v
+      - name: Prepare audio analysis models
+        run: python audio_analysis.py
+      - name: Test real audio inference
+        run: python tests/audio_inference.py
       - name: Desktop interaction and audio tests
         run: python desktop.py --self-test --self-test-result smoke-result.json
       - name: Capture Windows dependency notices

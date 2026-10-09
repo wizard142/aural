@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 import json, os, pathlib, re, subprocess, threading, uuid, mimetypes, sqlite3, datetime, math
 import ai_playlists
-from song_metadata import capture_profile, read_profile, save_profile
+from song_metadata import capture_profile, read_profile, save_profile, update_labels
+import song_identification
+import audio_analysis
+from song_enrichment import Enricher
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, unquote, parse_qs
 from runtime import APP_ROOT, data_directory, downloader_command, binary, subprocess_options
@@ -98,6 +101,10 @@ def download(key, url, kind):
         with lock:
             jobs[key]['status'] = 'complete' if code == 0 else 'failed'
             jobs[key]['detail'] = 'Added to your library' if code == 0 else tail
+            if code==0:
+                settings=read_settings();track=next((t for t in library() if t['id']==video_id(url)+'-'+kind),None)
+                if track and (settings.get('audio_auto',True) or settings.get('identify_auto',False)):
+                    enricher().submit([track],settings.get('audio_auto',True),settings.get('identify_auto',False))
     except OSError as e:
         with lock: jobs[key].update(status='failed',detail=str(e))
 
@@ -226,6 +233,39 @@ def start_ai_playlist(body):
     threading.Thread(target=generate_ai_playlist,args=(job_id,prompt,color,config),daemon=True).start()
     return {'id':job_id}
 
+_ENRICHER=None
+def enricher():
+    global _ENRICHER
+    if _ENRICHER is None:_ENRICHER=Enricher(DATA,lock,library,read_settings)
+    return _ENRICHER
+
+def profile_settings():
+    settings=read_settings()
+    return {'audio_auto':settings.get('audio_auto',True),'identify_auto':settings.get('identify_auto',False),**ai_playlists.key_status(song_identification.KEY_CONFIG),'models_ready':all((audio_analysis.models_directory(DATA)/f['name']).is_file() for f in audio_analysis.manifest()['files'])}
+
+def save_profile_settings(body):
+    value=read_settings();warning=None
+    for key in ('audio_auto','identify_auto'):
+        if key in body:
+            if not isinstance(body[key],bool):raise ValueError('Invalid song profile setting')
+            value[key]=body[key]
+    if body.get('forget'):warning=ai_playlists.forget_key(song_identification.KEY_CONFIG)
+    elif body.get('key'):warning=ai_playlists.set_key(song_identification.KEY_CONFIG,body['key'],body.get('remember') is True)
+    elif body.get('remember') and ai_playlists.get_key(song_identification.KEY_CONFIG):warning=ai_playlists.set_key(song_identification.KEY_CONFIG,ai_playlists.get_key(song_identification.KEY_CONFIG),True)
+    if value.get('identify_auto') and not ai_playlists.get_key(song_identification.KEY_CONFIG):raise ValueError('Add an AcoustID application key before enabling identification')
+    temp=DATA/'settings.tmp';temp.write_text(json.dumps(value),encoding='utf-8');temp.replace(DATA/'settings.json')
+    return {**profile_settings(),'warning':warning}
+
+def start_enrichment(body):
+    items=library()
+    if body.get('id'):
+        items=[t for t in items if t['id']==body['id']]
+    if not items:raise ValueError('No downloaded songs to process')
+    audio=body.get('audio') is True;identify=body.get('identify') is True
+    if not audio and not identify:raise ValueError('Choose audio analysis or recording identification')
+    if identify and not ai_playlists.get_key(song_identification.KEY_CONFIG):raise ValueError('Add an AcoustID application key in Settings → Song profiles first')
+    return {'id':enricher().submit(items,audio,identify,body.get('force') is True)}
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         import logging
@@ -241,6 +281,12 @@ class Handler(BaseHTTPRequestHandler):
             body=json.loads(self.rfile.read(size))
             if not isinstance(body,dict): raise ValueError('Invalid request')
             with lock:
+                if self.path=='/api/profiles/settings':return self.reply(save_profile_settings(body))
+                if self.path=='/api/profiles/analyze':return self.reply(start_enrichment(body),202)
+                if self.path=='/api/song/labels':
+                    track_id=body.get('id')
+                    if track_id not in {t['id'] for t in library()}:raise ValueError('Song not found')
+                    return self.reply(update_labels(DATA,track_id,body))
                 if self.path=='/api/session/end':clear_temporary();return self.reply({'ok':True})
                 if self.path=='/api/ai/settings':return self.reply(update_ai_config(body))
                 if self.path=='/api/ai/generate':return self.reply(start_ai_playlist(body),202)
@@ -278,6 +324,10 @@ class Handler(BaseHTTPRequestHandler):
             with lock:
                 if track_id not in {t['id'] for t in library()}:return self.reply({'error':'Song not found'},404)
                 return self.reply(read_profile(DATA,track_id))
+        if path=='/api/profiles/settings':
+            with lock:return self.reply(profile_settings())
+        if path=='/api/profiles/jobs':
+            with lock:return self.reply(list(_ENRICHER.jobs.values()) if _ENRICHER else [])
         if path == '/api/settings':
             with lock: return self.reply(read_settings())
         if path == '/api/insights':
