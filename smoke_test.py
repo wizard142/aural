@@ -83,6 +83,12 @@ def run():
         threading.Thread(target=server.serve_forever,daemon=True).start()
         window = Window(f'http://127.0.0.1:{server.server_port}')
         window.show()
+        from unittest.mock import patch
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtWebEngineCore import QWebEnginePage
+        with patch.object(QDesktopServices,'openUrl',return_value=True) as opened:
+            accepted=window.library.page().acceptNavigationRequest(QUrl('https://acoustid.org/new-application'),QWebEnginePage.NavigationType.NavigationTypeLinkClicked,True)
+            results['checks']['identification_registration_link']=not accepted and opened.call_count==1
         results['checks']['request_filter'] = blocked_request('https://ads.doubleclick.net/ad') and not blocked_request('https://music.youtube.com/watch?v=dQw4w9WgXcQ')
         script = r'''
         (async()=>{const checks={};try{

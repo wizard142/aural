@@ -34,7 +34,7 @@ if len(sys.argv)>1 and sys.argv[1]=='--download-worker':
 from urllib.parse import urlparse, parse_qs, quote
 try:
     from PySide6.QtCore import QUrl, Qt, Signal, QLockFile, QTimer
-    from PySide6.QtGui import QIcon, QPixmap, QPainter
+    from PySide6.QtGui import QIcon, QPixmap, QPainter, QDesktopServices
     from PySide6.QtWidgets import QApplication, QMainWindow, QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QLabel
     from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineUrlRequestInterceptor, QWebEngineScript
     from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -66,6 +66,8 @@ class LibraryPage(QWebEnginePage):
         super().__init__(profile, parent)
         self.origin = origin
     def acceptNavigationRequest(self, url, navigation_type, main_frame):
+        if main_frame and url.toString()=='https://acoustid.org/new-application' and navigation_type==QWebEnginePage.NavigationType.NavigationTypeLinkClicked:
+            QDesktopServices.openUrl(url);return False
         if url.scheme() == 'aural' and url.host() == 'close':
             self.closeReady.emit();return False
         if url.scheme() == 'aural' and url.host() == 'youtube':

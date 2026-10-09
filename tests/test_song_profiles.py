@@ -1,6 +1,9 @@
 import json
 import tempfile
 import threading
+import io
+import hashlib
+from urllib.error import URLError
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -9,6 +12,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import song_metadata as metadata
 import song_identification as identification
 import ai_playlists as ai
+import audio_analysis
 from song_enrichment import Enricher
 
 class SongProfileTests(unittest.TestCase):
@@ -73,5 +77,18 @@ class FingerprintMatchTests(unittest.TestCase):
             _,result=identification.identify('ignored',fp)
         payload=request.call_args_list[0].args[1].decode();self.assertIn('fingerprint=abc',payload);self.assertNotIn('ignored',payload)
         self.assertEqual(result['genres'],['metal']);self.assertEqual(result['title'],'Confirmed')
+
+class ModelDownloadTests(unittest.TestCase):
+    def test_transient_failure_retries_and_verifies_hash(self):
+        payload=b'fixture model'
+        entry={'name':'test.onnx','url':'https://example.org/test.onnx','size':len(payload),'sha256':hashlib.sha256(payload).hexdigest()}
+        with tempfile.TemporaryDirectory() as temp,patch.object(audio_analysis,'manifest',return_value={'files':[entry]}),patch.object(audio_analysis,'models_directory',return_value=Path(temp)),patch.object(audio_analysis,'urlopen',side_effect=[URLError('temporary'),io.BytesIO(payload)]) as request,patch.object(audio_analysis.time,'sleep'):
+            audio_analysis.ensure_models(temp)
+            self.assertEqual((Path(temp)/'test.onnx').read_bytes(),payload);self.assertEqual(request.call_count,2)
+    def test_invalid_model_is_never_installed(self):
+        entry={'name':'test.onnx','url':'https://example.org/test.onnx','size':4,'sha256':hashlib.sha256(b'good').hexdigest()}
+        with tempfile.TemporaryDirectory() as temp,patch.object(audio_analysis,'manifest',return_value={'files':[entry]}),patch.object(audio_analysis,'models_directory',return_value=Path(temp)),patch.object(audio_analysis,'urlopen',return_value=io.BytesIO(b'evil')):
+            with self.assertRaisesRegex(ValueError,'checksum'):audio_analysis.ensure_models(temp)
+            self.assertFalse((Path(temp)/'test.onnx').exists());self.assertFalse(list(Path(temp).glob('*.download')))
 
 if __name__=='__main__':unittest.main()
