@@ -3,8 +3,10 @@ import hashlib
 import json
 import subprocess
 import threading
+import time
 from pathlib import Path
 from urllib.request import Request, urlopen
+from urllib.error import URLError
 from runtime import APP_ROOT, binary, subprocess_options
 
 MODEL_LOCK=threading.Lock()
@@ -25,12 +27,18 @@ def ensure_models(data,progress=lambda text:None):
             progress('Downloading audio models…')
             temp=file.with_suffix(file.suffix+'.download')
             try:
-                with urlopen(Request(entry['url'],headers={'User-Agent':'Aural/1.2 (https://github.com/wizard142/aural)'}),timeout=60) as response,temp.open('wb') as output:
-                    remaining=entry['size'];digest=hashlib.sha256()
-                    while chunk:=response.read(65536):
-                        remaining-=len(chunk)
-                        if remaining<0:raise ValueError('Audio model download has an unexpected size')
-                        digest.update(chunk);output.write(chunk)
+                for attempt in range(3):
+                    try:
+                        with urlopen(Request(entry['url'],headers={'User-Agent':'Aural/1.2 (https://github.com/wizard142/aural)'}),timeout=30) as response,temp.open('wb') as output:
+                            remaining=entry['size'];digest=hashlib.sha256()
+                            while chunk:=response.read(65536):
+                                remaining-=len(chunk)
+                                if remaining<0:raise ValueError('Audio model download has an unexpected size')
+                                digest.update(chunk);output.write(chunk)
+                        break
+                    except (URLError,TimeoutError):
+                        if attempt==2:raise ValueError('Could not download audio models. Check your connection and try analysis again.') from None
+                        progress('Retrying audio model download…');time.sleep(attempt+1)
                 if remaining or digest.hexdigest()!=entry['sha256']:raise ValueError('Audio model checksum failed; please try again')
                 temp.replace(file)
             finally:temp.unlink(missing_ok=True)
